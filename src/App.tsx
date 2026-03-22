@@ -119,7 +119,7 @@ function MasterScreen({
 }: {
   server: string
   setServer: (s: string) => void
-  onBack: () => void
+  onBack?: () => void
 }) {
   const [tenantName, setTenantName] = useState('')
   const [referenceId, setReferenceId] = useState('')
@@ -301,13 +301,13 @@ function PlayerScreen({
 }: {
   server: string
   setServer: (s: string) => void
-  onBack: () => void
+  onBack?: () => void
 }) {
   const [tenantApiKey, setTenantApiKey] = useState('')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userName, setUserName] = useState('')
   const [userID, setUserID] = useState('')
-  const [balance, setBalance] = useState('10,000.00')
+  const [balance] = useState('10,000.00')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [securityLevel, setSecurityLevel] = useState('mid')
@@ -526,16 +526,6 @@ function PlayerScreen({
   )
 }
 
-interface Profile {
-  id: string
-  user_id: string
-  name: string
-  status: string
-  created: string
-  country: string
-  security_level: string
-}
-
 function TenantAdminScreen({
   server,
   setServer,
@@ -547,29 +537,6 @@ function TenantAdminScreen({
 }) {
   const [tenantApiKey, setTenantApiKey] = useState('')
   const [isConnected, setIsConnected] = useState(false)
-  const [profiles, setProfiles] = useState<Profile[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-
-  const fetchProfiles = async (apiKey: string) => {
-    setIsLoading(true)
-    try {
-      // Use the tenant API key to list profiles via a simple search
-      // Since there's no list endpoint, we'll show a message about using the admin portal
-      // For demo purposes, we'll try to get tenant details
-      const response = await fetch(`https://${server}/api/tenants/self`, {
-        headers: { 'x-api-key': apiKey, 'Accept': 'application/json' },
-      })
-
-      // The tenant API doesn't have a list profiles endpoint yet
-      // So we show a placeholder with the admin portal link
-      setIsConnected(true)
-      toast.success('Connected! See profiles below.')
-    } catch {
-      toast.error('Failed to connect')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const handleConnect = () => {
     if (!tenantApiKey) {
