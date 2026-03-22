@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-
 import {
   Select,
   SelectContent,
@@ -19,292 +18,719 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 
-const API_KEY = import.meta.env.VITE_BACKEND_API_KEY
+const MASTER_API_KEY = import.meta.env.VITE_MASTER_API_KEY || ''
+
+type Screen = 'home' | 'master' | 'player' | 'tenant-admin'
+
+interface Tenant {
+  id: string
+  name: string
+  reference_id: string
+  api_key: string
+}
+
+// Auto-detect screen based on hostname
+// master-demo.* → master screen (onboard tenants)
+// player-demo.* → player screen (user wallet + KYC withdrawal)
+// tenant-demo.* → tenant admin screen (approval list, pending profiles)
+function getDefaultScreen(): Screen {
+  const hostname = window.location.hostname
+  if (hostname.startsWith('master-demo')) return 'master'
+  if (hostname.startsWith('player-demo') || hostname.startsWith('player')) return 'player'
+  if (hostname.startsWith('tenant-demo')) return 'tenant-admin'
+  return 'home'
+}
 
 function App() {
+  const defaultScreen = getDefaultScreen()
+  const [screen, setScreen] = useState<Screen>(defaultScreen)
   const [server, setServer] = useState('api.vanguardkyc.online')
-  const [name, setName] = useState('')
-  const [userID, setUserID] = useState('')
-  const [email, setEmail] = useState('')
-  const [phoneNumber, setPhoneNumber] = useState('')
-  const [country, setCountry] = useState('')
-  const [ipAddress, setIpAddress] = useState('')
-  const [documentNumber, setDocumentNumber] = useState('')
-  const [documentType, setDocumentType] = useState('')
-  const [securityLevel, setSecurityLevel] = useState('mid')
-  const [gender, setGender] = useState('')
-  const [language, setLanguage] = useState('')
+
+  // If accessed via a specific domain, lock to that screen (hide back/home)
+  const isLocked = defaultScreen !== 'home'
+
+  return (
+    <div className="w-full max-w-2xl mx-auto">
+      {screen === 'home' && <HomeScreen onNavigate={setScreen} />}
+      {screen === 'master' && (
+        <MasterScreen server={server} setServer={setServer} onBack={isLocked ? undefined : () => setScreen('home')} />
+      )}
+      {screen === 'player' && (
+        <PlayerScreen server={server} setServer={setServer} onBack={isLocked ? undefined : () => setScreen('home')} />
+      )}
+      {screen === 'tenant-admin' && (
+        <TenantAdminScreen server={server} setServer={setServer} onBack={isLocked ? undefined : () => setScreen('home')} />
+      )}
+    </div>
+  )
+}
+
+function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+  return (
+    <FieldSet>
+      <FieldLegend>VanguardKYC: Multi-Tenant Demo</FieldLegend>
+      <FieldDescription>
+        Choose a demo scenario to test the multi-tenant KYC system.
+      </FieldDescription>
+      <FieldGroup>
+        <div className="flex flex-col gap-4 py-4">
+          <Button
+            className="h-auto py-6 flex flex-col gap-1"
+            variant="outline"
+            onClick={() => onNavigate('master')}
+          >
+            <span className="text-lg font-semibold">Master: Tenant Onboarding</span>
+            <span className="text-sm text-muted-foreground font-normal">
+              Create a new tenant and get their API key
+            </span>
+          </Button>
+          <Button
+            className="h-auto py-6 flex flex-col gap-1"
+            variant="outline"
+            onClick={() => onNavigate('player')}
+          >
+            <span className="text-lg font-semibold">Player: Withdrawal + KYC</span>
+            <span className="text-sm text-muted-foreground font-normal">
+              Simulate a user withdrawing money, triggers KYC verification
+            </span>
+          </Button>
+          <Button
+            className="h-auto py-6 flex flex-col gap-1"
+            variant="outline"
+            onClick={() => onNavigate('tenant-admin')}
+          >
+            <span className="text-lg font-semibold">Tenant: Admin Dashboard</span>
+            <span className="text-sm text-muted-foreground font-normal">
+              View pending approvals and verification statuses
+            </span>
+          </Button>
+        </div>
+      </FieldGroup>
+    </FieldSet>
+  )
+}
+
+function MasterScreen({
+  server,
+  setServer,
+  onBack,
+}: {
+  server: string
+  setServer: (s: string) => void
+  onBack: () => void
+}) {
+  const [tenantName, setTenantName] = useState('')
+  const [referenceId, setReferenceId] = useState('')
+  const [description, setDescription] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [createdTenant, setCreatedTenant] = useState<Tenant | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  const handleSubmit = async () => {
-    if (!userID) {
-      toast.warning('User ID is mandatory')
+  const handleCreateTenant = async () => {
+    if (!tenantName) {
+      toast.warning('Tenant name is required')
+      return
+    }
+    if (!MASTER_API_KEY) {
+      toast.error('VITE_MASTER_API_KEY is not set')
       return
     }
 
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.warning('Invalid email format')
-      return
-    }
+    setIsLoading(true)
+    try {
+      const response = await fetch(`https://${server}/api/tenants`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': MASTER_API_KEY,
+        },
+        body: JSON.stringify({
+          name: tenantName,
+          description: description || undefined,
+          reference_id: referenceId || undefined,
+        }),
+      })
 
-    console.log('📝 Testing: Create KYC Record...')
-
-    const createKYCPromise = async () => {
-      setIsLoading(true)
-
-      const payload: any = {
-        userID: userID,
-        securityLevel: securityLevel,
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error || `HTTP ${response.status}`)
       }
 
-      if (name) payload.name = name
-      if (email) payload.email = email
-      if (phoneNumber) payload.phoneNumber = phoneNumber
-      if (documentNumber) payload.documentNumber = documentNumber
-      if (documentType) payload.documentType = documentType === '01' ? 'national_id' : 'passport'
+      const data = await response.json()
+      setCreatedTenant({
+        id: data.data.id,
+        name: data.data.name,
+        reference_id: data.data.reference_id || '',
+        api_key: data.data.api_key,
+      })
+      toast.success(`Tenant "${tenantName}" created!`)
+    } catch (error) {
+      toast.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCopy = async (text: string) => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    toast.success('Copied to clipboard')
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <FieldSet>
+      <FieldLegend>Master: Tenant Onboarding</FieldLegend>
+      <FieldDescription>
+        Create a new tenant. This simulates a new company signing up for KYC services.
+      </FieldDescription>
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="server">API Server</FieldLabel>
+          <Input
+            id="server"
+            value={server}
+            onChange={(e) => setServer(e.target.value)}
+          />
+        </Field>
+
+        <Separator />
+
+        {!createdTenant ? (
+          <>
+            <Field>
+              <FieldLabel htmlFor="tenantName">Tenant Name *</FieldLabel>
+              <Input
+                id="tenantName"
+                placeholder="Acme Corp"
+                value={tenantName}
+                onChange={(e) => setTenantName(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="referenceId">Reference ID (your system's ID)</FieldLabel>
+              <Input
+                id="referenceId"
+                placeholder="550e8400-e29b-41d4-a716-446655440000"
+                value={referenceId}
+                onChange={(e) => setReferenceId(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="description">Description</FieldLabel>
+              <Input
+                id="description"
+                placeholder="Brief description..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </Field>
+            <Button onClick={handleCreateTenant} disabled={isLoading || !tenantName}>
+              {isLoading ? 'Creating...' : 'Create Tenant'}
+            </Button>
+          </>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-4">
+              <p className="text-sm font-semibold text-green-700 dark:text-green-400 mb-2">
+                Tenant created successfully!
+              </p>
+              <div className="grid gap-2 text-sm">
+                <div><span className="text-muted-foreground">Tenant ID:</span> <code>{createdTenant.id}</code></div>
+                <div><span className="text-muted-foreground">Name:</span> {createdTenant.name}</div>
+                {createdTenant.reference_id && (
+                  <div><span className="text-muted-foreground">Reference ID:</span> {createdTenant.reference_id}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
+              <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 mb-2">
+                API Key (copy now — shown only once)
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-sm bg-muted p-2 rounded break-all">
+                  {createdTenant.api_key}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(createdTenant.api_key)}
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+
+            <Separator />
+
+            <p className="text-sm text-muted-foreground">
+              Use this API key in the "Tenant: User KYC Flow" screen to test creating KYC profiles under this tenant.
+            </p>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => {
+                setCreatedTenant(null)
+                setTenantName('')
+                setReferenceId('')
+                setDescription('')
+              }}>
+                Create Another
+              </Button>
+              <Button variant="outline" onClick={onBack}>
+                Back to Home
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!createdTenant && (
+          <Button variant="ghost" onClick={onBack}>Back</Button>
+        )}
+      </FieldGroup>
+    </FieldSet>
+  )
+}
+
+function PlayerScreen({
+  server,
+  setServer,
+  onBack,
+}: {
+  server: string
+  setServer: (s: string) => void
+  onBack: () => void
+}) {
+  const [tenantApiKey, setTenantApiKey] = useState('')
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [userName, setUserName] = useState('')
+  const [userID, setUserID] = useState('')
+  const [balance, setBalance] = useState('10,000.00')
+  const [withdrawAmount, setWithdrawAmount] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [securityLevel, setSecurityLevel] = useState('mid')
+  const [country, setCountry] = useState('')
+  const [language, setLanguage] = useState('')
+
+  const handleLogin = () => {
+    if (!tenantApiKey) {
+      toast.warning('Enter your tenant API key')
+      return
+    }
+    if (!userName || !userID) {
+      toast.warning('Enter user name and ID')
+      return
+    }
+    setIsLoggedIn(true)
+    toast.success(`Welcome, ${userName}!`)
+  }
+
+  const handleWithdraw = async () => {
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      toast.warning('Enter a valid withdrawal amount')
+      return
+    }
+
+    setIsLoading(true)
+    toast.info('KYC verification required for withdrawal. Redirecting...')
+
+    try {
+      const payload: any = {
+        userID,
+        name: userName,
+        securityLevel,
+      }
       if (country) payload.country = country
-      if (ipAddress) payload.ipAddress = ipAddress
-      if (gender) payload.gender = gender
       if (language) payload.language = language
-
-      console.log('Language value:', language)
-      console.log('Payload being sent:', payload)
-
-      console.log('Payload being sent:', payload)
 
       const response = await fetch(`https://${server}/api/profiles/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': API_KEY
+          'x-api-key': tenantApiKey,
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const err = await response.json()
+        throw new Error(err.error || `HTTP ${response.status}`)
       }
 
       const data = await response.json()
-      console.log('✅ Response:', data)
 
       if (data.id && data.url) {
-        console.log('\n🔗 Generated URL:', data.url)
-        return data
-      } else {
-        throw new Error('Failed to create KYC record - missing ID or URL')
-      }
-    }
-
-    toast.promise(createKYCPromise(), {
-      loading: 'Creating KYC record...',
-      success: (data) => {
-        setIsLoading(false)
-        // Redirect after a short delay to let user see the success message
+        toast.success('KYC profile created! Redirecting to verification...')
         setTimeout(() => {
           window.location.href = data.url
         }, 1500)
-        return 'KYC record created successfully! Redirecting...'
-      },
-      error: (error) => {
-        setIsLoading(false)
-        console.error('❌ Error:', error)
-        return `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
+      } else {
+        throw new Error('Failed to create KYC profile')
       }
-    })
+    } catch (error) {
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <FieldSet>
+        <FieldLegend>Tenant: User Login</FieldLegend>
+        <FieldDescription>
+          Simulate a tenant app. Enter the tenant API key and user details to "log in".
+        </FieldDescription>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="server">API Server</FieldLabel>
+            <Input
+              id="server"
+              value={server}
+              onChange={(e) => setServer(e.target.value)}
+            />
+          </Field>
+          <Separator />
+          <Field>
+            <FieldLabel htmlFor="tenantKey">Tenant API Key *</FieldLabel>
+            <Input
+              id="tenantKey"
+              type="password"
+              placeholder="Paste the API key from tenant onboarding"
+              value={tenantApiKey}
+              onChange={(e) => setTenantApiKey(e.target.value)}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field>
+              <FieldLabel htmlFor="userName">User Name *</FieldLabel>
+              <Input
+                id="userName"
+                placeholder="John Doe"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="userID">User ID *</FieldLabel>
+              <Input
+                id="userID"
+                placeholder="user_123"
+                value={userID}
+                onChange={(e) => setUserID(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Button onClick={handleLogin} disabled={!tenantApiKey || !userName || !userID}>
+            Log In
+          </Button>
+          <Button variant="ghost" onClick={onBack}>Back</Button>
+        </FieldGroup>
+      </FieldSet>
+    )
   }
 
   return (
-    <>
-      <div className="w-full max-w-sd">
-        <FieldSet>
-          <FieldLegend>Identivia: Demo</FieldLegend>
-          <FieldDescription>
-            We need your information to verify your identity.
-          </FieldDescription>
-          <FieldGroup>
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="name">Name</FieldLabel>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="userID">User ID</FieldLabel>
-                <Input
-                  id="userID"
-                  type="text"
-                  placeholder="user_123"
-                  value={userID}
-                  onChange={(e) => setUserID(e.target.value)}
-                />
-              </Field>
-            </div>
+    <FieldSet>
+      <FieldLegend>Wallet Dashboard</FieldLegend>
+      <FieldDescription>
+        Welcome, {userName}! Your balance is <strong>${balance}</strong>.
+      </FieldDescription>
+      <FieldGroup>
+        <div className="rounded-lg border p-4 text-center">
+          <p className="text-sm text-muted-foreground">Available Balance</p>
+          <p className="text-3xl font-bold mt-1">${balance}</p>
+        </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="john@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="phoneNumber">Phone Number</FieldLabel>
-                <Input
-                  id="phoneNumber"
-                  type="tel"
-                  placeholder="+1234567890"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                />
-              </Field>
-            </div>
+        <Separator />
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="country">Country</FieldLabel>
-                <Select
-                  value={country}
-                  onValueChange={(value) => setCountry(value)}
-                >
-                  <SelectTrigger id="country">
-                    <SelectValue placeholder="Select country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="MALAYSIA">Malaysia</SelectItem>
-                    <SelectItem value="THAILAND">Thailand</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="ipAddress">IP Address</FieldLabel>
-                <Input
-                  id="ipAddress"
-                  type="text"
-                  placeholder="192.168.1.1"
-                  value={ipAddress}
-                  onChange={(e) => setIpAddress(e.target.value)}
-                />
-              </Field>
-            </div>
+        <p className="text-sm font-medium">Withdraw Funds</p>
+        <p className="text-sm text-muted-foreground">
+          A withdrawal will trigger KYC identity verification.
+        </p>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="document_number">Document Number</FieldLabel>
-                <Input
-                  id="document_number"
-                  type="text"
-                  placeholder="123456789"
-                  value={documentNumber}
-                  onChange={(e) => setDocumentNumber(e.target.value)}
-                  disabled={!documentType}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="document_type">
-                  Document Type
-                </FieldLabel>
-                <Select
-                  value={documentType}
-                  onValueChange={(value) => setDocumentType(value)}
-                >
-                  <SelectTrigger id="document_type">
-                    <SelectValue placeholder="Select document type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="national_id">NRIC</SelectItem>
-                    <SelectItem value="passport">Passport</SelectItem>
-                    <SelectItem value="driving_license">Driver License</SelectItem>
-                    <SelectItem value="others">Others</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
+        <Field>
+          <FieldLabel htmlFor="amount">Withdrawal Amount (USD)</FieldLabel>
+          <Input
+            id="amount"
+            type="number"
+            placeholder="1000.00"
+            value={withdrawAmount}
+            onChange={(e) => setWithdrawAmount(e.target.value)}
+          />
+        </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="securityLevel">Security Level</FieldLabel>
-                <Select
-                  value={securityLevel}
-                  onValueChange={(value) => setSecurityLevel(value)}
-                >
-                  <SelectTrigger id="securityLevel">
-                    <SelectValue placeholder="Select level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="mid">Mid</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="gender">
-                  Gender
-                </FieldLabel>
-                <Select
-                  value={gender}
-                  onValueChange={(value) => setGender(value)}
-                >
-                  <SelectTrigger id="gender">
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">Male</SelectItem>
-                    <SelectItem value="female">Female</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field>
-                <FieldLabel htmlFor="server">Server</FieldLabel>
-                <Input
-                  id="server"
-                  type="text"
-                  placeholder="api.vanguardkyc.online"
-                  list="servers"
-                  value={server}
-                  onChange={(e) => setServer(e.target.value)}
-                />
-                <datalist id="servers">
-                  <option value="api.vanguardkyc.online" />
-                </datalist>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="language">Language</FieldLabel>
-                <Select
-                  value={language}
-                  onValueChange={(value) => setLanguage(value)}
-                >
-                  <SelectTrigger id="language">
-                    <SelectValue placeholder="Select language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="th">Thai</SelectItem>
-                    <SelectItem value="zh-CN">Chinese (Simplified)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <Button onClick={handleSubmit} disabled={isLoading}>
-              {isLoading ? 'Processing...' : 'Go to Verification'}
-            </Button>
-          </FieldGroup>
-        </FieldSet>
+        <div className="grid grid-cols-3 gap-4">
+          <Field>
+            <FieldLabel htmlFor="security">Security Level</FieldLabel>
+            <Select value={securityLevel} onValueChange={setSecurityLevel}>
+              <SelectTrigger id="security">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="mid">Mid</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="country">Country</FieldLabel>
+            <Select value={country} onValueChange={setCountry}>
+              <SelectTrigger id="country">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MALAYSIA">Malaysia</SelectItem>
+                <SelectItem value="THAILAND">Thailand</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="language">Language</FieldLabel>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger id="language">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="th">Thai</SelectItem>
+                <SelectItem value="zh-CN">Chinese</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+
+        <Button
+          onClick={handleWithdraw}
+          disabled={isLoading || !withdrawAmount}
+          className="w-full"
+        >
+          {isLoading ? 'Processing...' : `Withdraw $${withdrawAmount || '0.00'}`}
+        </Button>
+
+        <Separator />
+
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => setIsLoggedIn(false)}>
+            Log Out
+          </Button>
+          <Button variant="ghost" onClick={onBack}>
+            Back to Home
+          </Button>
+        </div>
+      </FieldGroup>
+    </FieldSet>
+  )
+}
+
+interface Profile {
+  id: string
+  user_id: string
+  name: string
+  status: string
+  created: string
+  country: string
+  security_level: string
+}
+
+function TenantAdminScreen({
+  server,
+  setServer,
+  onBack,
+}: {
+  server: string
+  setServer: (s: string) => void
+  onBack?: () => void
+}) {
+  const [tenantApiKey, setTenantApiKey] = useState('')
+  const [isConnected, setIsConnected] = useState(false)
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const fetchProfiles = async (apiKey: string) => {
+    setIsLoading(true)
+    try {
+      // Use the tenant API key to list profiles via a simple search
+      // Since there's no list endpoint, we'll show a message about using the admin portal
+      // For demo purposes, we'll try to get tenant details
+      const response = await fetch(`https://${server}/api/tenants/self`, {
+        headers: { 'x-api-key': apiKey, 'Accept': 'application/json' },
+      })
+
+      // The tenant API doesn't have a list profiles endpoint yet
+      // So we show a placeholder with the admin portal link
+      setIsConnected(true)
+      toast.success('Connected! See profiles below.')
+    } catch {
+      toast.error('Failed to connect')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleConnect = () => {
+    if (!tenantApiKey) {
+      toast.warning('Enter your tenant API key')
+      return
+    }
+    setIsConnected(true)
+    toast.success('Connected to tenant dashboard')
+  }
+
+  if (!isConnected) {
+    return (
+      <FieldSet>
+        <FieldLegend>Tenant Admin: Login</FieldLegend>
+        <FieldDescription>
+          Enter your tenant API key to view KYC verification statuses.
+        </FieldDescription>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="server">API Server</FieldLabel>
+            <Input id="server" value={server} onChange={(e) => setServer(e.target.value)} />
+          </Field>
+          <Separator />
+          <Field>
+            <FieldLabel htmlFor="adminKey">Tenant API Key *</FieldLabel>
+            <Input
+              id="adminKey"
+              type="password"
+              placeholder="Paste your tenant API key"
+              value={tenantApiKey}
+              onChange={(e) => setTenantApiKey(e.target.value)}
+            />
+          </Field>
+          <Button onClick={handleConnect} disabled={!tenantApiKey}>
+            Connect
+          </Button>
+          {onBack && <Button variant="ghost" onClick={onBack}>Back</Button>}
+        </FieldGroup>
+      </FieldSet>
+    )
+  }
+
+  return (
+    <FieldSet>
+      <FieldLegend>Tenant Admin: Dashboard</FieldLegend>
+      <FieldDescription>
+        View and manage KYC verification profiles for your tenant.
+      </FieldDescription>
+      <FieldGroup>
+        <div className="rounded-lg border p-4">
+          <p className="text-sm font-semibold mb-2">Connected</p>
+          <p className="text-xs text-muted-foreground break-all">
+            API Key: {tenantApiKey.substring(0, 8)}...{tenantApiKey.substring(tenantApiKey.length - 4)}
+          </p>
+        </div>
+
+        <Separator />
+
+        <div className="rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
+          <p className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">
+            Admin Portal
+          </p>
+          <p className="text-sm text-muted-foreground mb-3">
+            For full profile management, approvals, and rejections, use the VanguardKYC Admin Portal:
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => window.open('https://admin.vanguardkyc.online', '_blank')}
+          >
+            Open Admin Portal
+          </Button>
+        </div>
+
+        <Separator />
+
+        <p className="text-sm font-medium">Quick Profile Lookup</p>
+        <ProfileLookup server={server} apiKey={tenantApiKey} />
+
+        <Separator />
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={() => setIsConnected(false)}>Disconnect</Button>
+          {onBack && <Button variant="ghost" onClick={onBack}>Back to Home</Button>}
+        </div>
+      </FieldGroup>
+    </FieldSet>
+  )
+}
+
+function ProfileLookup({ server, apiKey }: { server: string; apiKey: string }) {
+  const [profileId, setProfileId] = useState('')
+  const [profile, setProfile] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleLookup = async () => {
+    if (!profileId) {
+      toast.warning('Enter a profile ID')
+      return
+    }
+    setIsLoading(true)
+    setProfile(null)
+    try {
+      const response = await fetch(`https://${server}/api/profiles/${profileId}`, {
+        headers: {
+          'x-api-key': apiKey,
+          'Accept': 'application/json',
+        },
+      })
+
+      if (response.status === 404) {
+        toast.error('Profile not found (or belongs to a different tenant)')
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      setProfile(data.data || data)
+      toast.success('Profile found')
+    } catch (error) {
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Enter profile ID"
+          value={profileId}
+          onChange={(e) => setProfileId(e.target.value)}
+          className="flex-1"
+        />
+        <Button onClick={handleLookup} disabled={isLoading || !profileId}>
+          {isLoading ? '...' : 'Lookup'}
+        </Button>
       </div>
-    </>
+      {profile && (
+        <div className="rounded-lg border p-4 text-sm">
+          <div className="grid grid-cols-2 gap-2">
+            <div><span className="text-muted-foreground">Name:</span> {profile.name || '—'}</div>
+            <div><span className="text-muted-foreground">Status:</span>{' '}
+              <span className={
+                profile.verification_status === 'verified' ? 'text-green-600 font-semibold' :
+                profile.verification_status === 'rejected' ? 'text-red-600 font-semibold' :
+                'text-yellow-600 font-semibold'
+              }>
+                {profile.status || profile.verification_status || 'pending'}
+              </span>
+            </div>
+            <div><span className="text-muted-foreground">Country:</span> {profile.country || '—'}</div>
+            <div><span className="text-muted-foreground">Security:</span> {profile.security_level || '—'}</div>
+            <div><span className="text-muted-foreground">Document:</span> {profile.document_type || '—'}</div>
+            <div><span className="text-muted-foreground">Created:</span> {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '—'}</div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
