@@ -23,7 +23,7 @@ import {
 const API_KEY = import.meta.env.VITE_BACKEND_API_KEY
 
 function App() {
-  const [server, setServer] = useState('api.identivia.com')
+  const [server, setServer] = useState('api.vanguardkyc.online')
   const [name, setName] = useState('')
   const [userID, setUserID] = useState('')
   const [email, setEmail] = useState('')
@@ -272,13 +272,13 @@ function App() {
                 <Input
                   id="server"
                   type="text"
-                  placeholder="api.identivia.com"
+                  placeholder="api.vanguardkyc.online"
                   list="servers"
                   value={server}
                   onChange={(e) => setServer(e.target.value)}
                 />
                 <datalist id="servers">
-                  <option value="api.identivia.com" />
+                  <option value="api.vanguardkyc.online" />
                 </datalist>
               </Field>
               <Field>
