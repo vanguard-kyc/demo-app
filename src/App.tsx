@@ -134,6 +134,9 @@ function MasterScreen({
   const [tenantName, setTenantName] = useState('')
   const [referenceId, setReferenceId] = useState('')
   const [description, setDescription] = useState('')
+  const [adminEmail, setAdminEmail] = useState('')
+  const [adminPassword, setAdminPassword] = useState('')
+  const [adminName, setAdminName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [createdTenant, setCreatedTenant] = useState<Tenant | null>(null)
   const [copied, setCopied] = useState(false)
@@ -141,6 +144,10 @@ function MasterScreen({
   const handleCreateTenant = async () => {
     if (!tenantName) {
       toast.warning('Tenant name is required')
+      return
+    }
+    if (!adminEmail || !adminPassword) {
+      toast.warning('Admin email and password are required')
       return
     }
     if (!MASTER_API_KEY) {
@@ -160,6 +167,9 @@ function MasterScreen({
           name: tenantName,
           description: description || undefined,
           reference_id: referenceId || undefined,
+          admin_email: adminEmail,
+          admin_password: adminPassword,
+          admin_name: adminName || undefined,
         }),
       })
 
@@ -237,7 +247,39 @@ function MasterScreen({
                 onChange={(e) => setDescription(e.target.value)}
               />
             </Field>
-            <Button onClick={handleCreateTenant} disabled={isLoading || !tenantName}>
+
+            <Separator />
+
+            <Field>
+              <FieldLabel htmlFor="adminName">Admin Name</FieldLabel>
+              <Input
+                id="adminName"
+                placeholder="John Doe"
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="adminEmail">Admin Email *</FieldLabel>
+              <Input
+                id="adminEmail"
+                type="email"
+                placeholder="admin@acmecorp.com"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="adminPassword">Admin Password *</FieldLabel>
+              <Input
+                id="adminPassword"
+                type="password"
+                placeholder="Min 8 characters"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+              />
+            </Field>
+            <Button onClick={handleCreateTenant} disabled={isLoading || !tenantName || !adminEmail || !adminPassword}>
               {isLoading ? 'Creating...' : 'Create Tenant'}
             </Button>
           </>
