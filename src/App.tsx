@@ -72,18 +72,28 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
     <FieldSet>
       <FieldLegend>VanguardKYC: Multi-Tenant Demo</FieldLegend>
       <FieldDescription>
-        Choose a demo scenario to test the multi-tenant KYC system.
+        Demo the full KYC flow: Onboard tenant, whitelist domains, user withdraws money, admin approves.
       </FieldDescription>
       <FieldGroup>
-        <div className="flex flex-col gap-4 py-4">
+        <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground mb-2">Flow</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li><strong>Tenant Onboard</strong> — Master creates tenant + gets API key</li>
+            <li><strong>Domain Whitelist</strong> — Master adds tenant's domain to CORS whitelist</li>
+            <li><strong>User Withdraw</strong> — Player tries to withdraw, KYC triggered</li>
+            <li><strong>Admin Approve</strong> — Tenant admin reviews and approves in admin portal</li>
+          </ol>
+        </div>
+        <Separator />
+        <div className="flex flex-col gap-4">
           <Button
             className="h-auto py-6 flex flex-col gap-1"
             variant="outline"
             onClick={() => onNavigate('master')}
           >
-            <span className="text-lg font-semibold">Master: Tenant Onboarding</span>
+            <span className="text-lg font-semibold">Step 1 & 2: Tenant Onboard + Whitelist</span>
             <span className="text-sm text-muted-foreground font-normal">
-              Create a new tenant and get their API key
+              Create tenant, get API key, add domain to CORS whitelist
             </span>
           </Button>
           <Button
@@ -91,9 +101,9 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
             variant="outline"
             onClick={() => onNavigate('player')}
           >
-            <span className="text-lg font-semibold">Player: Withdrawal + KYC</span>
+            <span className="text-lg font-semibold">Step 3: Player Withdrawal + KYC</span>
             <span className="text-sm text-muted-foreground font-normal">
-              Simulate a user withdrawing money, triggers KYC verification
+              User logs in, withdraws money, gets redirected to KYC verification
             </span>
           </Button>
           <Button
@@ -101,9 +111,9 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
             variant="outline"
             onClick={() => onNavigate('tenant-admin')}
           >
-            <span className="text-lg font-semibold">Tenant: Admin Dashboard</span>
+            <span className="text-lg font-semibold">Step 4: Admin Approve</span>
             <span className="text-sm text-muted-foreground font-normal">
-              View pending approvals and verification statuses
+              Tenant admin reviews profile and approves/rejects in admin portal
             </span>
           </Button>
         </div>
@@ -266,8 +276,12 @@ function MasterScreen({
 
             <Separator />
 
+            <DomainWhitelistStep server={server} />
+
+            <Separator />
+
             <p className="text-sm text-muted-foreground">
-              Use this API key in the "Tenant: User KYC Flow" screen to test creating KYC profiles under this tenant.
+              Use the tenant API key in the "Player" screen to test creating KYC profiles under this tenant.
             </p>
 
             <div className="flex gap-2">
@@ -279,9 +293,11 @@ function MasterScreen({
               }}>
                 Create Another
               </Button>
-              <Button variant="outline" onClick={onBack}>
-                Back to Home
-              </Button>
+              {onBack && (
+                <Button variant="outline" onClick={onBack}>
+                  Back to Home
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -581,9 +597,9 @@ function TenantAdminScreen({
 
   return (
     <FieldSet>
-      <FieldLegend>Tenant Admin: Dashboard</FieldLegend>
+      <FieldLegend>Step 4: Admin Review</FieldLegend>
       <FieldDescription>
-        View and manage KYC verification profiles for your tenant.
+        Review KYC verification profiles and approve or reject them.
       </FieldDescription>
       <FieldGroup>
         <div className="rounded-lg border p-4">
@@ -622,6 +638,85 @@ function TenantAdminScreen({
         </div>
       </FieldGroup>
     </FieldSet>
+  )
+}
+
+function DomainWhitelistStep({ server }: { server: string }) {
+  const [domain, setDomain] = useState('')
+  const [notes, setNotes] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [added, setAdded] = useState(false)
+
+  const handleAdd = async () => {
+    let d = domain.trim()
+    if (!d) {
+      toast.warning('Enter a domain')
+      return
+    }
+    if (!MASTER_API_KEY) {
+      toast.error('Master API key not configured')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch(`https://${server}/api/domains`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': MASTER_API_KEY,
+        },
+        body: JSON.stringify({ domain: d, notes: notes.trim() || undefined }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error || `HTTP ${response.status}`)
+      }
+
+      toast.success(`Domain ${d} added to whitelist`)
+      setAdded(true)
+    } catch (error) {
+      toast.error(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm font-medium">Step 2: Add Tenant's Domain to Whitelist</p>
+      <p className="text-sm text-muted-foreground">
+        Add the tenant's website domain so it can make API requests (CORS). Use *.example.com for all subdomains.
+      </p>
+      {!added ? (
+        <>
+          <div className="flex gap-2">
+            <Input
+              placeholder="*.example.com or https://app.example.com"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            />
+            <Button onClick={handleAdd} disabled={isLoading || !domain.trim()}>
+              {isLoading ? '...' : 'Add'}
+            </Button>
+          </div>
+          <Input
+            placeholder="Notes (optional)"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="text-sm"
+          />
+        </>
+      ) : (
+        <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-3">
+          <p className="text-sm text-green-600 dark:text-green-400">
+            Domain added to whitelist. CORS will allow requests from this origin within 5 minutes.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
