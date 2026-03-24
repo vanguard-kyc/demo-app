@@ -596,6 +596,11 @@ function TenantAdminScreen({
 }) {
   const [tenantApiKey, setTenantApiKey] = useState('')
   const [isConnected, setIsConnected] = useState(false)
+  const [profiles, setProfiles] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchId, setSearchId] = useState('')
+  const [searchResult, setSearchResult] = useState<any>(null)
 
   const handleConnect = () => {
     if (!tenantApiKey) {
@@ -604,14 +609,68 @@ function TenantAdminScreen({
     }
     setIsConnected(true)
     toast.success('Connected to tenant dashboard')
+    fetchProfiles(tenantApiKey, 'all')
+  }
+
+  const fetchProfiles = async (apiKey: string, status: string) => {
+    setIsLoading(true)
+    try {
+      let url = `https://${server}/api/profiles?limit=50`
+      if (status && status !== 'all') url += `&status=${status}`
+      const response = await fetch(url, {
+        headers: { 'x-api-key': apiKey, 'Accept': 'application/json' },
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = await response.json()
+      setProfiles(data.data || [])
+    } catch (error) {
+      toast.error(`Failed to load profiles: ${error instanceof Error ? error.message : 'Unknown'}`)
+      setProfiles([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status)
+    fetchProfiles(tenantApiKey, status)
+  }
+
+  const handleSearch = async () => {
+    if (!searchId.trim()) return
+    setSearchResult(null)
+    try {
+      const response = await fetch(`https://${server}/api/profiles/${searchId.trim()}`, {
+        headers: { 'x-api-key': tenantApiKey, 'Accept': 'application/json' },
+      })
+      if (response.status === 404) {
+        toast.error('Profile not found (or belongs to a different tenant)')
+        return
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = await response.json()
+      setSearchResult(data.data || data)
+      toast.success('Profile found')
+    } catch (error) {
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'verified': return 'text-green-600 dark:text-green-400'
+      case 'rejected': return 'text-red-600 dark:text-red-400'
+      case 'pending': return 'text-yellow-600 dark:text-yellow-400'
+      default: return 'text-muted-foreground'
+    }
   }
 
   if (!isConnected) {
     return (
       <FieldSet>
-        <FieldLegend>Tenant Admin: Login</FieldLegend>
+        <FieldLegend>Step 4: Tenant Admin</FieldLegend>
         <FieldDescription>
-          Enter your tenant API key to view KYC verification statuses.
+          Enter your tenant API key to view and manage KYC profiles.
         </FieldDescription>
         <FieldGroup>
           <Field>
@@ -640,43 +699,118 @@ function TenantAdminScreen({
 
   return (
     <FieldSet>
-      <FieldLegend>Step 4: Admin Review</FieldLegend>
+      <FieldLegend>Tenant Admin: Profiles</FieldLegend>
       <FieldDescription>
-        Review KYC verification profiles and approve or reject them.
+        View all KYC verification profiles for your tenant.
       </FieldDescription>
       <FieldGroup>
-        <div className="rounded-lg border p-4">
-          <p className="text-sm font-semibold mb-2">Connected</p>
-          <p className="text-xs text-muted-foreground break-all">
-            API Key: {tenantApiKey.substring(0, 8)}...{tenantApiKey.substring(tenantApiKey.length - 4)}
-          </p>
-        </div>
-
-        <Separator />
-
-        <div className="rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
-          <p className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">
-            Admin Portal
-          </p>
-          <p className="text-sm text-muted-foreground mb-3">
-            For full profile management, approvals, and rejections, use the VanguardKYC Admin Portal:
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => window.open('https://admin.vanguardkyc.online', '_blank')}
-          >
-            Open Admin Portal
+        <div className="rounded-lg border p-3 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold">Connected</p>
+            <p className="text-xs text-muted-foreground break-all">
+              Key: {tenantApiKey.substring(0, 8)}...{tenantApiKey.substring(tenantApiKey.length - 4)}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => window.open('https://admin.vanguardkyc.online', '_blank')}>
+            Full Admin Portal
           </Button>
         </div>
 
         <Separator />
 
-        <p className="text-sm font-medium">Quick Profile Lookup</p>
-        <ProfileLookup server={server} apiKey={tenantApiKey} />
+        {/* Search by ID */}
+        <p className="text-sm font-medium">Search by Profile ID</p>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Enter profile ID"
+            value={searchId}
+            onChange={(e) => { setSearchId(e.target.value); setSearchResult(null) }}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="flex-1"
+          />
+          <Button onClick={handleSearch} disabled={!searchId.trim()}>
+            Search
+          </Button>
+        </div>
+        {searchResult && (
+          <div className="rounded-lg border p-4 text-sm">
+            <div className="grid grid-cols-2 gap-2">
+              <div><span className="text-muted-foreground">Name:</span> {searchResult.name || '—'}</div>
+              <div><span className="text-muted-foreground">Status:</span>{' '}
+                <span className={getStatusColor(searchResult.status || searchResult.verification_status)}>
+                  {searchResult.status || searchResult.verification_status || 'pending'}
+                </span>
+              </div>
+              <div><span className="text-muted-foreground">Country:</span> {searchResult.country || '—'}</div>
+              <div><span className="text-muted-foreground">Security:</span> {searchResult.security_level || '—'}</div>
+              <div><span className="text-muted-foreground">Document:</span> {searchResult.document_type || '—'}</div>
+              <div><span className="text-muted-foreground">Created:</span> {searchResult.createdAt ? new Date(searchResult.createdAt).toLocaleDateString() : '—'}</div>
+            </div>
+          </div>
+        )}
+
+        <Separator />
+
+        {/* Profile List */}
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">All Profiles</p>
+          <div className="flex gap-1">
+            {['all', 'pending', 'verified', 'rejected'].map((s) => (
+              <Button
+                key={s}
+                variant={statusFilter === s ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleStatusFilter(s)}
+                className="text-xs capitalize"
+              >
+                {s}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">Loading profiles...</div>
+        ) : profiles.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No profiles found{statusFilter !== 'all' ? ` with status "${statusFilter}"` : ''}.
+          </div>
+        ) : (
+          <div className="rounded-lg border divide-y max-h-96 overflow-y-auto">
+            {profiles.map((p: any) => (
+              <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">{p.name || p.user_id || p.id}</p>
+                    <span className={`text-xs font-semibold ${getStatusColor(p.status)}`}>
+                      {p.status || 'pending'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    ID: {p.id} {p.document_type ? `| ${p.document_type}` : ''} {p.country ? `| ${p.country}` : ''}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs shrink-0"
+                  onClick={() => { setSearchId(p.id); setSearchResult(null); handleSearch() }}
+                >
+                  View
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          {profiles.length} profile{profiles.length !== 1 ? 's' : ''} shown.
+          Use the Full Admin Portal for approvals and rejections.
+        </p>
 
         <Separator />
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => setIsConnected(false)}>Disconnect</Button>
+          <Button variant="ghost" onClick={() => { setIsConnected(false); setProfiles([]); setSearchResult(null) }}>Disconnect</Button>
           {onBack && <Button variant="ghost" onClick={onBack}>Back to Home</Button>}
         </div>
       </FieldGroup>
@@ -757,82 +891,6 @@ function DomainWhitelistStep({ server }: { server: string }) {
           <p className="text-sm text-green-600 dark:text-green-400">
             Domain added to whitelist. CORS will allow requests from this origin within 5 minutes.
           </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ProfileLookup({ server, apiKey }: { server: string; apiKey: string }) {
-  const [profileId, setProfileId] = useState('')
-  const [profile, setProfile] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleLookup = async () => {
-    if (!profileId) {
-      toast.warning('Enter a profile ID')
-      return
-    }
-    setIsLoading(true)
-    setProfile(null)
-    try {
-      const response = await fetch(`https://${server}/api/profiles/${profileId}`, {
-        headers: {
-          'x-api-key': apiKey,
-          'Accept': 'application/json',
-        },
-      })
-
-      if (response.status === 404) {
-        toast.error('Profile not found (or belongs to a different tenant)')
-        return
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const data = await response.json()
-      setProfile(data.data || data)
-      toast.success('Profile found')
-    } catch (error) {
-      toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex gap-2">
-        <Input
-          placeholder="Enter profile ID"
-          value={profileId}
-          onChange={(e) => setProfileId(e.target.value)}
-          className="flex-1"
-        />
-        <Button onClick={handleLookup} disabled={isLoading || !profileId}>
-          {isLoading ? '...' : 'Lookup'}
-        </Button>
-      </div>
-      {profile && (
-        <div className="rounded-lg border p-4 text-sm">
-          <div className="grid grid-cols-2 gap-2">
-            <div><span className="text-muted-foreground">Name:</span> {profile.name || '—'}</div>
-            <div><span className="text-muted-foreground">Status:</span>{' '}
-              <span className={
-                profile.verification_status === 'verified' ? 'text-green-600 font-semibold' :
-                profile.verification_status === 'rejected' ? 'text-red-600 font-semibold' :
-                'text-yellow-600 font-semibold'
-              }>
-                {profile.status || profile.verification_status || 'pending'}
-              </span>
-            </div>
-            <div><span className="text-muted-foreground">Country:</span> {profile.country || '—'}</div>
-            <div><span className="text-muted-foreground">Security:</span> {profile.security_level || '—'}</div>
-            <div><span className="text-muted-foreground">Document:</span> {profile.document_type || '—'}</div>
-            <div><span className="text-muted-foreground">Created:</span> {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '—'}</div>
-          </div>
         </div>
       )}
     </div>
