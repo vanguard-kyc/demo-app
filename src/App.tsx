@@ -464,7 +464,7 @@ function PlayerScreen({
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field>
-              <FieldLabel htmlFor="userName">User Name *</FieldLabel>
+              <FieldLabel htmlFor="userName">Full Name *</FieldLabel>
               <Input
                 id="userName"
                 placeholder="John Doe"
