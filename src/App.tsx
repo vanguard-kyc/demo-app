@@ -585,6 +585,13 @@ function PlayerScreen({
   )
 }
 
+const PB_URL = 'https://pocketbase.vanguardkyc.online'
+
+function getFileUrl(collectionId: string, recordId: string, filename: string) {
+  if (!filename) return ''
+  return `${PB_URL}/api/files/${collectionId}/${recordId}/${filename}`
+}
+
 function TenantAdminScreen({
   server,
   setServer,
@@ -599,8 +606,8 @@ function TenantAdminScreen({
   const [profiles, setProfiles] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
-  const [searchId, setSearchId] = useState('')
-  const [searchResult, setSearchResult] = useState<any>(null)
+  const [selectedProfile, setSelectedProfile] = useState<any>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   const handleConnect = () => {
     if (!tenantApiKey) {
@@ -636,33 +643,32 @@ function TenantAdminScreen({
     fetchProfiles(tenantApiKey, status)
   }
 
-  const handleSearch = async () => {
-    if (!searchId.trim()) return
-    setSearchResult(null)
+  const handleViewProfile = async (profileId: string) => {
+    setDetailLoading(true)
+    setSelectedProfile(null)
     try {
-      const response = await fetch(`https://${server}/api/profiles/${searchId.trim()}`, {
+      const response = await fetch(`https://${server}/api/profiles/${profileId}`, {
         headers: { 'x-api-key': tenantApiKey, 'Accept': 'application/json' },
       })
-      if (response.status === 404) {
-        toast.error('Profile not found (or belongs to a different tenant)')
-        return
-      }
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
-      setSearchResult(data.data || data)
-      toast.success('Profile found')
+      setSelectedProfile(data.data || data)
     } catch (error) {
       toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
+    } finally {
+      setDetailLoading(false)
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'verified': return 'text-green-600 dark:text-green-400'
-      case 'rejected': return 'text-red-600 dark:text-red-400'
-      case 'pending': return 'text-yellow-600 dark:text-yellow-400'
-      default: return 'text-muted-foreground'
+  const getStatusBadge = (status: string) => {
+    const s = status?.toLowerCase() || 'pending'
+    const colors: Record<string, string> = {
+      verified: 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30',
+      rejected: 'bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30',
+      pending: 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30',
+      unverified: 'bg-gray-500/20 text-gray-700 dark:text-gray-400 border-gray-500/30',
     }
+    return `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${colors[s] || colors.unverified}`
   }
 
   if (!isConnected) {
@@ -697,6 +703,113 @@ function TenantAdminScreen({
     )
   }
 
+  // Profile detail view
+  if (selectedProfile) {
+    const vh = selectedProfile.verification_history
+    return (
+      <FieldSet>
+        <FieldLegend>Profile Details</FieldLegend>
+        <FieldDescription>
+          <span className={getStatusBadge(selectedProfile.status)}>
+            {selectedProfile.status || 'pending'}
+          </span>
+        </FieldDescription>
+        <FieldGroup>
+          <Button variant="outline" size="sm" onClick={() => setSelectedProfile(null)}>
+            Back to List
+          </Button>
+
+          {/* Profile Info */}
+          <div className="rounded-lg border p-4">
+            <p className="text-sm font-medium mb-3">Profile Information</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-muted-foreground">Name:</span> {selectedProfile.name || '—'}</div>
+              <div><span className="text-muted-foreground">Status:</span>{' '}
+                <span className={getStatusBadge(selectedProfile.status)}>{selectedProfile.status || 'pending'}</span>
+              </div>
+              <div><span className="text-muted-foreground">Document Type:</span> {selectedProfile.document_type || '—'}</div>
+              <div><span className="text-muted-foreground">Document No:</span> {selectedProfile.document_number || '—'}</div>
+              <div><span className="text-muted-foreground">Country:</span> {selectedProfile.country || '—'}</div>
+              <div><span className="text-muted-foreground">Security:</span> {selectedProfile.security_level || '—'}</div>
+              <div><span className="text-muted-foreground">Language:</span> {selectedProfile.language || '—'}</div>
+              <div><span className="text-muted-foreground">Created:</span> {selectedProfile.createdAt ? new Date(selectedProfile.createdAt).toLocaleDateString() : '—'}</div>
+            </div>
+          </div>
+
+          {/* Verification Images */}
+          {vh && (
+            <>
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium mb-3">Verification Details</p>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><span className="text-muted-foreground">Liveness:</span> {vh.liveness_status || '—'}</div>
+                  <div><span className="text-muted-foreground">Confidence:</span> {vh.liveness_confidence ? `${vh.liveness_confidence}%` : '—'}</div>
+                  <div><span className="text-muted-foreground">Name (doc):</span> {vh.name || '—'}</div>
+                  <div><span className="text-muted-foreground">Gender:</span> {vh.gender || '—'}</div>
+                  <div><span className="text-muted-foreground">DOB:</span> {vh.date_of_birth || '—'}</div>
+                  <div><span className="text-muted-foreground">Address:</span> {vh.address || '—'}</div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-medium mb-3">Documents & Photos</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {vh.facial_photo && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Selfie</p>
+                      <img
+                        src={getFileUrl(vh.collectionId, vh.id, vh.facial_photo)}
+                        alt="Selfie"
+                        className="rounded-lg border w-full aspect-square object-cover cursor-pointer hover:opacity-80"
+                        onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.facial_photo), '_blank')}
+                      />
+                    </div>
+                  )}
+                  {vh.document_front && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Document Front</p>
+                      <img
+                        src={getFileUrl(vh.collectionId, vh.id, vh.document_front)}
+                        alt="Document Front"
+                        className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80"
+                        onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_front), '_blank')}
+                      />
+                    </div>
+                  )}
+                  {vh.document_back && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Document Back</p>
+                      <img
+                        src={getFileUrl(vh.collectionId, vh.id, vh.document_back)}
+                        alt="Document Back"
+                        className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80"
+                        onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_back), '_blank')}
+                      />
+                    </div>
+                  )}
+                </div>
+                {!vh.facial_photo && !vh.document_front && !vh.document_back && (
+                  <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {!vh && (
+            <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+              No verification history yet. User has not completed the KYC flow.
+            </div>
+          )}
+
+          <Button variant="outline" onClick={() => window.open('https://admin.vanguardkyc.online', '_blank')}>
+            Open Full Admin Portal for Approval
+          </Button>
+        </FieldGroup>
+      </FieldSet>
+    )
+  }
+
+  // Profile list view
   return (
     <FieldSet>
       <FieldLegend>Tenant Admin: Profiles</FieldLegend>
@@ -718,42 +831,9 @@ function TenantAdminScreen({
 
         <Separator />
 
-        {/* Search by ID */}
-        <p className="text-sm font-medium">Search by Profile ID</p>
-        <div className="flex gap-2">
-          <Input
-            placeholder="Enter profile ID"
-            value={searchId}
-            onChange={(e) => { setSearchId(e.target.value); setSearchResult(null) }}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            className="flex-1"
-          />
-          <Button onClick={handleSearch} disabled={!searchId.trim()}>
-            Search
-          </Button>
-        </div>
-        {searchResult && (
-          <div className="rounded-lg border p-4 text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              <div><span className="text-muted-foreground">Name:</span> {searchResult.name || '—'}</div>
-              <div><span className="text-muted-foreground">Status:</span>{' '}
-                <span className={getStatusColor(searchResult.status || searchResult.verification_status)}>
-                  {searchResult.status || searchResult.verification_status || 'pending'}
-                </span>
-              </div>
-              <div><span className="text-muted-foreground">Country:</span> {searchResult.country || '—'}</div>
-              <div><span className="text-muted-foreground">Security:</span> {searchResult.security_level || '—'}</div>
-              <div><span className="text-muted-foreground">Document:</span> {searchResult.document_type || '—'}</div>
-              <div><span className="text-muted-foreground">Created:</span> {searchResult.createdAt ? new Date(searchResult.createdAt).toLocaleDateString() : '—'}</div>
-            </div>
-          </div>
-        )}
-
-        <Separator />
-
-        {/* Profile List */}
+        {/* Status filter + refresh */}
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">All Profiles</p>
+          <p className="text-sm font-medium">Profiles</p>
           <div className="flex gap-1">
             {['all', 'pending', 'verified', 'rejected'].map((s) => (
               <Button
@@ -769,48 +849,56 @@ function TenantAdminScreen({
           </div>
         </div>
 
-        {isLoading ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">Loading profiles...</div>
+        {isLoading || detailLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading...</div>
         ) : profiles.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
+          <div className="py-8 text-center text-sm text-muted-foreground">
             No profiles found{statusFilter !== 'all' ? ` with status "${statusFilter}"` : ''}.
           </div>
         ) : (
-          <div className="rounded-lg border divide-y max-h-96 overflow-y-auto">
-            {profiles.map((p: any) => (
-              <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{p.name || p.user_id || p.id}</p>
-                    <span className={`text-xs font-semibold ${getStatusColor(p.status)}`}>
-                      {p.status || 'pending'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    ID: {p.id} {p.document_type ? `| ${p.document_type}` : ''} {p.country ? `| ${p.country}` : ''}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs shrink-0"
-                  onClick={() => { setSearchId(p.id); setSearchResult(null); handleSearch() }}
+          <div className="rounded-lg border overflow-hidden">
+            {/* Header */}
+            <div className="grid grid-cols-12 gap-2 px-4 py-2 bg-muted text-xs font-medium text-muted-foreground">
+              <div className="col-span-3">User</div>
+              <div className="col-span-2">Doc Number</div>
+              <div className="col-span-2">Status</div>
+              <div className="col-span-2">Country</div>
+              <div className="col-span-2">Created</div>
+              <div className="col-span-1"></div>
+            </div>
+            {/* Rows */}
+            <div className="divide-y max-h-96 overflow-y-auto">
+              {profiles.map((p: any) => (
+                <div
+                  key={p.id}
+                  className="grid grid-cols-12 gap-2 px-4 py-3 text-sm items-center hover:bg-muted/50 cursor-pointer"
+                  onClick={() => handleViewProfile(p.id)}
                 >
-                  View
-                </Button>
-              </div>
-            ))}
+                  <div className="col-span-3 truncate font-medium">{p.name || p.user_id || p.id}</div>
+                  <div className="col-span-2 truncate text-muted-foreground">{p.document_number || '—'}</div>
+                  <div className="col-span-2">
+                    <span className={getStatusBadge(p.status)}>{p.status || 'pending'}</span>
+                  </div>
+                  <div className="col-span-2 text-muted-foreground">{p.country || '—'}</div>
+                  <div className="col-span-2 text-muted-foreground text-xs">
+                    {p.created ? new Date(p.created).toLocaleDateString() : '—'}
+                  </div>
+                  <div className="col-span-1 text-right">
+                    <Button variant="ghost" size="sm" className="text-xs h-7">View</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         <p className="text-xs text-muted-foreground">
           {profiles.length} profile{profiles.length !== 1 ? 's' : ''} shown.
-          Use the Full Admin Portal for approvals and rejections.
         </p>
 
         <Separator />
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => { setIsConnected(false); setProfiles([]); setSearchResult(null) }}>Disconnect</Button>
+          <Button variant="ghost" onClick={() => { setIsConnected(false); setProfiles([]); setSelectedProfile(null) }}>Disconnect</Button>
           {onBack && <Button variant="ghost" onClick={onBack}>Back to Home</Button>}
         </div>
       </FieldGroup>
