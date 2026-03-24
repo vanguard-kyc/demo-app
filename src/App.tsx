@@ -805,50 +805,8 @@ function TenantAdminScreen({
             </div>
           )}
 
-          {/* AI Data Verification */}
-          {vh && (
-            <div className="rounded-lg border p-4">
-              <p className="text-sm font-semibold mb-1">AI Data Verification</p>
-              <p className="text-xs text-muted-foreground mb-3">Cross-reference submitted data with extracted document data</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-muted-foreground border-b">
-                      <th className="text-left py-2 pr-4">Field</th>
-                      <th className="text-left py-2 pr-4">Submitted</th>
-                      <th className="text-left py-2 pr-4">Extracted</th>
-                      <th className="text-left py-2">Match</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { field: 'Full Name', submitted: selectedProfile.name, extracted: vh.name },
-                      { field: 'Doc Number', submitted: selectedProfile.document_number, extracted: vh.document_number },
-                      { field: 'DOB', submitted: '', extracted: vh.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '' },
-                      { field: 'Nationality', submitted: selectedProfile.country, extracted: vh.country },
-                      { field: 'Address', submitted: '', extracted: vh.address },
-                    ].map((row, i) => {
-                      const match = row.submitted && row.extracted && row.submitted.toLowerCase() === row.extracted.toLowerCase()
-                      return (
-                        <tr key={i} className="border-b last:border-0">
-                          <td className="py-2 pr-4 text-muted-foreground">{row.field}</td>
-                          <td className="py-2 pr-4">{row.submitted || '—'}</td>
-                          <td className="py-2 pr-4">{row.extracted || '—'}</td>
-                          <td className="py-2">
-                            {row.submitted && row.extracted ? (
-                              <span className={match ? 'text-green-600 text-xs font-semibold' : 'text-red-600 text-xs font-semibold'}>
-                                {match ? 'Match' : 'Mismatch'}
-                              </span>
-                            ) : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+          {/* AI Data Verification with Edit */}
+          {vh && <AIVerificationTable profile={selectedProfile} vh={vh} server={server} apiKey={tenantApiKey} onUpdated={() => handleViewProfile(selectedProfile._profileId)} />}
 
           {/* Device & Location Intelligence */}
           {(fp || vh?.ip_address) && (
@@ -902,6 +860,33 @@ function TenantAdminScreen({
           {!vh && (
             <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-400">
               No verification history yet. User has not completed the KYC flow.
+            </div>
+          )}
+
+          {/* Audit Log */}
+          {selectedProfile.status_history && selectedProfile.status_history.length > 0 && (
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold mb-3">Audit Log</p>
+              <div className="space-y-3">
+                {selectedProfile.status_history.map((sh: any) => (
+                  <div key={sh.id} className="flex items-start gap-3">
+                    <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${
+                      sh.new_status === 'verified' ? 'bg-green-500' :
+                      sh.new_status === 'rejected' ? 'bg-red-500' :
+                      sh.new_status === 'pending' ? 'bg-yellow-500' :
+                      sh.new_status === 'reopened' ? 'bg-blue-500' :
+                      'bg-gray-400'
+                    }`} />
+                    <div>
+                      <span className={getStatusBadge(sh.new_status)}>{sh.new_status?.toUpperCase()}</span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(sh.created).toLocaleString()} • {sh.notes || 'System'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">Last updated: {new Date(selectedProfile.status_history[0]?.created).toLocaleDateString()}</p>
             </div>
           )}
 
@@ -1083,6 +1068,107 @@ function DomainWhitelistStep({ server }: { server: string }) {
           </p>
         </div>
       )}
+    </div>
+  )
+}
+
+function AIVerificationTable({ profile, vh, server, apiKey, onUpdated }: {
+  profile: any; vh: any; server: string; apiKey: string; onUpdated: () => void
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editData, setEditData] = useState({
+    name: profile.name || '',
+    document_number: profile.document_number || '',
+    country: profile.country || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch(`https://${server}/api/profiles/${profile._profileId}`, {
+        method: 'PATCH',
+        headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document_name: editData.name,
+          document_number: editData.document_number,
+          country: editData.country,
+        }),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      toast.success('Profile updated')
+      setIsEditing(false)
+      onUpdated()
+    } catch (error) {
+      toast.error(`Failed: ${error instanceof Error ? error.message : 'Unknown'}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const rows = [
+    { field: 'Full Name', key: 'name', submitted: profile.name, extracted: vh.name },
+    { field: 'Doc Number', key: 'document_number', submitted: profile.document_number, extracted: vh.document_number },
+    { field: 'DOB', key: '', submitted: '', extracted: vh.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '' },
+    { field: 'Nationality', key: 'country', submitted: profile.country, extracted: vh.country },
+    { field: 'Address', key: '', submitted: '', extracted: vh.address },
+  ]
+
+  return (
+    <div className="rounded-lg border p-4">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm font-semibold">AI Data Verification</p>
+        {!isEditing ? (
+          <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setIsEditing(true)}>Edit</Button>
+        ) : (
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setIsEditing(false)}>Cancel</Button>
+            <Button size="sm" className="text-xs h-7" onClick={handleSave} disabled={saving}>{saving ? '...' : 'Save'}</Button>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">Cross-reference submitted data with extracted document data</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-muted-foreground border-b">
+              <th className="text-left py-2 pr-4">Field</th>
+              <th className="text-left py-2 pr-4">Submitted Value</th>
+              <th className="text-left py-2 pr-4">Extracted Text</th>
+              <th className="text-left py-2">Match Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => {
+              const match = row.submitted && row.extracted && row.submitted.toLowerCase() === row.extracted.toLowerCase()
+              return (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="py-2 pr-4 text-muted-foreground">{row.field}</td>
+                  <td className="py-2 pr-4">
+                    {isEditing && row.key ? (
+                      <Input
+                        value={editData[row.key as keyof typeof editData] || ''}
+                        onChange={(e) => setEditData(prev => ({ ...prev, [row.key]: e.target.value }))}
+                        className="h-7 text-sm"
+                      />
+                    ) : (
+                      row.submitted || '—'
+                    )}
+                  </td>
+                  <td className="py-2 pr-4">{row.extracted || '—'}</td>
+                  <td className="py-2">
+                    {row.submitted && row.extracted ? (
+                      <span className={match ? 'text-green-600 text-xs font-semibold' : 'text-red-600 text-xs font-semibold'}>
+                        {match ? 'Match' : 'Mismatch'}
+                      </span>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
