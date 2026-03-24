@@ -584,7 +584,7 @@ function PlayerScreen({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <Field>
-            <FieldLabel htmlFor="country">Country</FieldLabel>
+            <FieldLabel htmlFor="country">Nationality</FieldLabel>
             <Select value={country} onValueChange={setCountry}>
               <SelectTrigger id="country">
                 <SelectValue placeholder="Select" />
