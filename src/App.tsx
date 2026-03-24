@@ -378,12 +378,12 @@ function PlayerScreen({
       toast.warning('Enter your tenant API key')
       return
     }
-    if (!userName || !userID) {
-      toast.warning('Enter user name and ID')
+    if (!userID) {
+      toast.warning('Enter your User ID')
       return
     }
     setIsLoggedIn(true)
-    toast.success(`Welcome, ${userName}!`)
+    toast.success(`Welcome, ${userID}!`)
   }
 
   const handleWithdraw = async () => {
@@ -395,14 +395,20 @@ function PlayerScreen({
     setIsLoading(true)
     toast.info('KYC verification required for withdrawal. Redirecting...')
 
+    if (!language) {
+      toast.warning('Please select a language')
+      setIsLoading(false)
+      return
+    }
+
     try {
       const payload: any = {
         userID,
-        name: userName,
+        language,
         securityLevel,
       }
+      if (userName) payload.name = userName
       if (country) payload.country = country
-      if (language) payload.language = language
 
       const response = await fetch(`https://${server}/api/profiles/create`, {
         method: 'POST',
@@ -462,27 +468,16 @@ function PlayerScreen({
               onChange={(e) => setTenantApiKey(e.target.value)}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
-            <Field>
-              <FieldLabel htmlFor="userName">Full Name *</FieldLabel>
-              <Input
-                id="userName"
-                placeholder="John Doe"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="userID">User ID *</FieldLabel>
-              <Input
-                id="userID"
-                placeholder="user_123"
-                value={userID}
-                onChange={(e) => setUserID(e.target.value)}
-              />
-            </Field>
-          </div>
-          <Button onClick={handleLogin} disabled={!tenantApiKey || !userName || !userID}>
+          <Field>
+            <FieldLabel htmlFor="userID">User ID *</FieldLabel>
+            <Input
+              id="userID"
+              placeholder="user_123"
+              value={userID}
+              onChange={(e) => setUserID(e.target.value)}
+            />
+          </Field>
+          <Button onClick={handleLogin} disabled={!tenantApiKey || !userID}>
             Log In
           </Button>
           <Button variant="ghost" onClick={onBack}>Back</Button>
@@ -495,7 +490,7 @@ function PlayerScreen({
     <FieldSet>
       <FieldLegend>Wallet Dashboard</FieldLegend>
       <FieldDescription>
-        Welcome, {userName}! Your balance is <strong>${balance}</strong>.
+        Welcome, <strong>{userID}</strong>! Your balance is <strong>${balance}</strong>.
       </FieldDescription>
       <FieldGroup>
         <div className="rounded-lg border p-4 text-center">
@@ -521,19 +516,30 @@ function PlayerScreen({
           />
         </Field>
 
-        <div className="grid grid-cols-3 gap-4">
+        <Field>
+          <FieldLabel htmlFor="language">Language *</FieldLabel>
+          <Select value={language} onValueChange={setLanguage}>
+            <SelectTrigger id="language">
+              <SelectValue placeholder="Select language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="th">Thai</SelectItem>
+              <SelectItem value="zh-CN">Chinese</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <p className="text-xs text-muted-foreground">Optional details (sent to KYC)</p>
+        <div className="grid grid-cols-2 gap-4">
           <Field>
-            <FieldLabel htmlFor="security">Security Level</FieldLabel>
-            <Select value={securityLevel} onValueChange={setSecurityLevel}>
-              <SelectTrigger id="security">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="mid">Mid</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectContent>
-            </Select>
+            <FieldLabel htmlFor="userName">Full Name</FieldLabel>
+            <Input
+              id="userName"
+              placeholder="John Doe"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="country">Country</FieldLabel>
@@ -547,24 +553,24 @@ function PlayerScreen({
               </SelectContent>
             </Select>
           </Field>
-          <Field>
-            <FieldLabel htmlFor="language">Language</FieldLabel>
-            <Select value={language} onValueChange={setLanguage}>
-              <SelectTrigger id="language">
-                <SelectValue placeholder="Select" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="th">Thai</SelectItem>
-                <SelectItem value="zh-CN">Chinese</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
         </div>
+        <Field>
+          <FieldLabel htmlFor="security">Security Level</FieldLabel>
+          <Select value={securityLevel} onValueChange={setSecurityLevel}>
+            <SelectTrigger id="security">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="mid">Mid</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
 
         <Button
           onClick={handleWithdraw}
-          disabled={isLoading || !withdrawAmount}
+          disabled={isLoading || !withdrawAmount || !language}
           className="w-full"
         >
           {isLoading ? 'Processing...' : `Withdraw $${withdrawAmount || '0.00'}`}
