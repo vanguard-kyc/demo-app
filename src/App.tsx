@@ -652,7 +652,9 @@ function TenantAdminScreen({
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
-      setSelectedProfile(data.data || data)
+      const profile = data.data || data
+      profile._profileId = profileId
+      setSelectedProfile(profile)
     } catch (error) {
       toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
     } finally {
@@ -706,104 +708,204 @@ function TenantAdminScreen({
   // Profile detail view
   if (selectedProfile) {
     const vh = selectedProfile.verification_history
+    const fp = vh?.fingerprint ? (typeof vh.fingerprint === 'string' ? (() => { try { return JSON.parse(vh.fingerprint) } catch { return null } })() : vh.fingerprint) : null
+
+    const handleStatusChange = async (newStatus: string, notes: string) => {
+      try {
+        // Update profile status
+        await fetch(`https://${server}/api/profiles/${selectedProfile._profileId}`, {
+          method: 'PATCH',
+          headers: { 'x-api-key': tenantApiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ verification_status: newStatus }),
+        })
+        // Create status history
+        await fetch(`https://${server}/api/status_history/${selectedProfile._profileId}`, {
+          method: 'POST',
+          headers: { 'x-api-key': tenantApiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            previous_status: selectedProfile.status || 'pending',
+            new_status: newStatus,
+            notes,
+          }),
+        })
+        toast.success(`Profile ${newStatus}`)
+        handleViewProfile(selectedProfile._profileId)
+        fetchProfiles(tenantApiKey, statusFilter)
+      } catch (error) {
+        toast.error(`Failed: ${error instanceof Error ? error.message : 'Unknown'}`)
+      }
+    }
+
     return (
       <FieldSet>
-        <FieldLegend>Profile Details</FieldLegend>
-        <FieldDescription>
-          <span className={getStatusBadge(selectedProfile.status)}>
-            {selectedProfile.status || 'pending'}
+        <FieldLegend>
+          <span className="flex items-center gap-2">
+            Submission #{selectedProfile._profileId?.substring(0, 8)}
+            <span className={getStatusBadge(selectedProfile.status)}>{selectedProfile.status || 'pending'}</span>
           </span>
-        </FieldDescription>
+        </FieldLegend>
         <FieldGroup>
-          <Button variant="outline" size="sm" onClick={() => setSelectedProfile(null)}>
-            Back to List
-          </Button>
-
-          {/* Profile Info */}
-          <div className="rounded-lg border p-4">
-            <p className="text-sm font-medium mb-3">Profile Information</p>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Name:</span> {selectedProfile.name || '—'}</div>
-              <div><span className="text-muted-foreground">Status:</span>{' '}
-                <span className={getStatusBadge(selectedProfile.status)}>{selectedProfile.status || 'pending'}</span>
-              </div>
-              <div><span className="text-muted-foreground">Document Type:</span> {selectedProfile.document_type || '—'}</div>
-              <div><span className="text-muted-foreground">Document No:</span> {selectedProfile.document_number || '—'}</div>
-              <div><span className="text-muted-foreground">Country:</span> {selectedProfile.country || '—'}</div>
-              <div><span className="text-muted-foreground">Security:</span> {selectedProfile.security_level || '—'}</div>
-              <div><span className="text-muted-foreground">Language:</span> {selectedProfile.language || '—'}</div>
-              <div><span className="text-muted-foreground">Created:</span> {selectedProfile.createdAt ? new Date(selectedProfile.createdAt).toLocaleDateString() : '—'}</div>
+          <div className="flex items-center justify-between">
+            <Button variant="outline" size="sm" onClick={() => setSelectedProfile(null)}>Back to List</Button>
+            <div className="flex gap-2">
+              <Button variant="destructive" size="sm" onClick={() => handleStatusChange('rejected', 'Rejected by tenant admin')}>Reject</Button>
+              <Button variant="outline" size="sm" onClick={() => handleStatusChange('reopened', 'Additional information requested')}>Request Info</Button>
+              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleStatusChange('verified', 'Approved by tenant admin')}>Approve</Button>
             </div>
           </div>
 
-          {/* Verification Images */}
-          {vh && (
-            <>
-              <div className="rounded-lg border p-4">
-                <p className="text-sm font-medium mb-3">Verification Details</p>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><span className="text-muted-foreground">Liveness:</span> {vh.liveness_status || '—'}</div>
-                  <div><span className="text-muted-foreground">Confidence:</span> {vh.liveness_confidence ? `${vh.liveness_confidence}%` : '—'}</div>
-                  <div><span className="text-muted-foreground">Name (doc):</span> {vh.name || '—'}</div>
-                  <div><span className="text-muted-foreground">Gender:</span> {vh.gender || '—'}</div>
-                  <div><span className="text-muted-foreground">DOB:</span> {vh.date_of_birth || '—'}</div>
-                  <div><span className="text-muted-foreground">Address:</span> {vh.address || '—'}</div>
-                </div>
-              </div>
+          <Separator />
 
-              <div className="rounded-lg border p-4">
-                <p className="text-sm font-medium mb-3">Documents & Photos</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {vh.facial_photo && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Selfie</p>
-                      <img
-                        src={getFileUrl(vh.collectionId, vh.id, vh.facial_photo)}
-                        alt="Selfie"
-                        className="rounded-lg border w-full aspect-square object-cover cursor-pointer hover:opacity-80"
-                        onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.facial_photo), '_blank')}
-                      />
-                    </div>
-                  )}
-                  {vh.document_front && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Document Front</p>
-                      <img
-                        src={getFileUrl(vh.collectionId, vh.id, vh.document_front)}
-                        alt="Document Front"
-                        className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80"
-                        onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_front), '_blank')}
-                      />
-                    </div>
-                  )}
-                  {vh.document_back && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Document Back</p>
-                      <img
-                        src={getFileUrl(vh.collectionId, vh.id, vh.document_back)}
-                        alt="Document Back"
-                        className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80"
-                        onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_back), '_blank')}
-                      />
-                    </div>
-                  )}
-                </div>
-                {!vh.facial_photo && !vh.document_front && !vh.document_back && (
-                  <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>
+          {/* Applicant Details */}
+          <div className="rounded-lg border p-4">
+            <p className="text-sm font-semibold mb-3">Applicant Details</p>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-muted-foreground">Full Name:</span> {selectedProfile.name || vh?.name || '—'}</div>
+              <div><span className="text-muted-foreground">Document Type:</span> {selectedProfile.document_type || vh?.document_type || '—'}</div>
+              <div><span className="text-muted-foreground">Document No:</span> {selectedProfile.document_number || vh?.document_number || '—'}</div>
+              <div><span className="text-muted-foreground">Country:</span> {selectedProfile.country || vh?.country || '—'}</div>
+              <div><span className="text-muted-foreground">Gender:</span> {vh?.gender || '—'}</div>
+              <div><span className="text-muted-foreground">DOB:</span> {vh?.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '—'}</div>
+              <div><span className="text-muted-foreground">Address:</span> {vh?.address || '—'}</div>
+              <div><span className="text-muted-foreground">Language:</span> {selectedProfile.language || '—'}</div>
+            </div>
+          </div>
+
+          {/* Identity Documents */}
+          {vh && (vh.document_front || vh.document_back) && (
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold mb-1">Identity Documents</p>
+              <p className="text-xs text-muted-foreground mb-3">Front and back views of the submitted ID document</p>
+              <div className="grid grid-cols-2 gap-4">
+                {vh.document_front && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Document Front</p>
+                    <img
+                      src={getFileUrl(vh.collectionId, vh.id, vh.document_front)}
+                      alt="Document Front"
+                      className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_front), '_blank')}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1 text-center">Click to enlarge</p>
+                  </div>
+                )}
+                {vh.document_back && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Document Back</p>
+                    <img
+                      src={getFileUrl(vh.collectionId, vh.id, vh.document_back)}
+                      alt="Document Back"
+                      className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_back), '_blank')}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1 text-center">Click to enlarge</p>
+                  </div>
                 )}
               </div>
-            </>
+            </div>
+          )}
+
+          {/* AI Data Verification */}
+          {vh && (
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold mb-1">AI Data Verification</p>
+              <p className="text-xs text-muted-foreground mb-3">Cross-reference submitted data with extracted document data</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted-foreground border-b">
+                      <th className="text-left py-2 pr-4">Field</th>
+                      <th className="text-left py-2 pr-4">Submitted</th>
+                      <th className="text-left py-2 pr-4">Extracted</th>
+                      <th className="text-left py-2">Match</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { field: 'Full Name', submitted: selectedProfile.name, extracted: vh.name },
+                      { field: 'Doc Number', submitted: selectedProfile.document_number, extracted: vh.document_number },
+                      { field: 'DOB', submitted: '', extracted: vh.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '' },
+                      { field: 'Nationality', submitted: selectedProfile.country, extracted: vh.country },
+                      { field: 'Address', submitted: '', extracted: vh.address },
+                    ].map((row, i) => {
+                      const match = row.submitted && row.extracted && row.submitted.toLowerCase() === row.extracted.toLowerCase()
+                      return (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-2 pr-4 text-muted-foreground">{row.field}</td>
+                          <td className="py-2 pr-4">{row.submitted || '—'}</td>
+                          <td className="py-2 pr-4">{row.extracted || '—'}</td>
+                          <td className="py-2">
+                            {row.submitted && row.extracted ? (
+                              <span className={match ? 'text-green-600 text-xs font-semibold' : 'text-red-600 text-xs font-semibold'}>
+                                {match ? 'Match' : 'Mismatch'}
+                              </span>
+                            ) : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Device & Location Intelligence */}
+          {(fp || vh?.ip_address) && (
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold mb-1">Device & Location Intelligence</p>
+              <p className="text-xs text-muted-foreground mb-3">Technical signals and fingerprinting data</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {fp?.visitorId && <div><span className="text-muted-foreground">Visitor ID:</span> <code className="text-xs">{fp.visitorId}</code></div>}
+                {fp?.confidence?.score && <div><span className="text-muted-foreground">Confidence:</span> {fp.confidence.score}%</div>}
+                {fp?.browserName && <div><span className="text-muted-foreground">Browser:</span> {fp.browserName} {fp.browserVersion}</div>}
+                {fp?.os && <div><span className="text-muted-foreground">OS:</span> {fp.os} {fp.osVersion}</div>}
+                {vh?.ip_address && <div><span className="text-muted-foreground">IP Address:</span> {vh.ip_address}</div>}
+                {fp?.firstSeenAt?.global && <div><span className="text-muted-foreground">First seen:</span> {new Date(fp.firstSeenAt.global).toLocaleDateString()}</div>}
+                {fp?.lastSeenAt?.global && <div><span className="text-muted-foreground">Last seen:</span> {new Date(fp.lastSeenAt.global).toLocaleDateString()}</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Risk Assessment & Live Selfie */}
+          {vh && (
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold mb-3">Risk Assessment</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="grid gap-3 text-sm">
+                    <div><span className="text-muted-foreground">Liveness Status:</span>{' '}
+                      <span className={vh.liveness_status === 'live' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                        {vh.liveness_status || '—'}
+                      </span>
+                    </div>
+                    <div><span className="text-muted-foreground">Liveness Confidence:</span> {vh.liveness_confidence ? `${vh.liveness_confidence}%` : '—'}</div>
+                    <div><span className="text-muted-foreground">Security Level:</span> {selectedProfile.security_level || '—'}</div>
+                  </div>
+                </div>
+                {vh.facial_photo && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Live Selfie</p>
+                    <img
+                      src={getFileUrl(vh.collectionId, vh.id, vh.facial_photo)}
+                      alt="Live Selfie"
+                      className="rounded-lg border w-32 h-32 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.facial_photo), '_blank')}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Click to enlarge</p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {!vh && (
-            <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-400">
               No verification history yet. User has not completed the KYC flow.
             </div>
           )}
 
-          <Button variant="outline" onClick={() => window.open('https://admin.vanguardkyc.online', '_blank')}>
-            Open Full Admin Portal for Approval
-          </Button>
+          <p className="text-xs text-muted-foreground">Profile ID: {selectedProfile._profileId} | Created: {selectedProfile.createdAt ? new Date(selectedProfile.createdAt).toLocaleString() : '—'}</p>
         </FieldGroup>
       </FieldSet>
     )
