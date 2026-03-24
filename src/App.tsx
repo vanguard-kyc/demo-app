@@ -366,6 +366,9 @@ function PlayerScreen({
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userName, setUserName] = useState('')
   const [userID, setUserID] = useState('')
+  const [userEmail, setUserEmail] = useState('')
+  const [documentType, setDocumentType] = useState('')
+  const [documentNumber, setDocumentNumber] = useState('')
   const [balance] = useState('10,000.00')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -408,6 +411,9 @@ function PlayerScreen({
         securityLevel,
       }
       if (userName) payload.name = userName
+      if (userEmail) payload.email = userEmail
+      if (documentType) payload.documentType = documentType
+      if (documentNumber) payload.documentNumber = documentNumber
       if (country) payload.country = country
 
       const response = await fetch(`https://${server}/api/profiles/create`, {
@@ -530,7 +536,7 @@ function PlayerScreen({
           </Select>
         </Field>
 
-        <p className="text-xs text-muted-foreground">Optional details (sent to KYC)</p>
+        <p className="text-xs text-muted-foreground">Optional details (pre-fill KYC profile)</p>
         <div className="grid grid-cols-2 gap-4">
           <Field>
             <FieldLabel htmlFor="userName">Full Name</FieldLabel>
@@ -541,6 +547,42 @@ function PlayerScreen({
               onChange={(e) => setUserName(e.target.value)}
             />
           </Field>
+          <Field>
+            <FieldLabel htmlFor="userEmail">Email</FieldLabel>
+            <Input
+              id="userEmail"
+              type="email"
+              placeholder="john@example.com"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field>
+            <FieldLabel htmlFor="documentType">Document Type</FieldLabel>
+            <Select value={documentType} onValueChange={setDocumentType}>
+              <SelectTrigger id="documentType">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="passport">Passport</SelectItem>
+                <SelectItem value="national_id">National ID</SelectItem>
+                <SelectItem value="driving_license">Driving License</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="documentNumber">Document Number</FieldLabel>
+            <Input
+              id="documentNumber"
+              placeholder="A12345678"
+              value={documentNumber}
+              onChange={(e) => setDocumentNumber(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
           <Field>
             <FieldLabel htmlFor="country">Country</FieldLabel>
             <Select value={country} onValueChange={setCountry}>
@@ -553,20 +595,20 @@ function PlayerScreen({
               </SelectContent>
             </Select>
           </Field>
+          <Field>
+            <FieldLabel htmlFor="security">Security Level</FieldLabel>
+            <Select value={securityLevel} onValueChange={setSecurityLevel}>
+              <SelectTrigger id="security">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="mid">Mid</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
-        <Field>
-          <FieldLabel htmlFor="security">Security Level</FieldLabel>
-          <Select value={securityLevel} onValueChange={setSecurityLevel}>
-            <SelectTrigger id="security">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="mid">Mid</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
 
         <Button
           onClick={handleWithdraw}
