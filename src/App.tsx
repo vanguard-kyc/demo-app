@@ -633,12 +633,7 @@ function PlayerScreen({
   )
 }
 
-const PB_URL = 'https://pocketbase.vanguardkyc.online'
-
-function getFileUrl(collectionId: string, recordId: string, filename: string) {
-  if (!filename) return ''
-  return `${PB_URL}/api/files/${collectionId}/${recordId}/${filename}`
-}
+// File URLs now come from the API response directly (no more PocketBase URLs)
 
 function TenantAdminScreen({
   server,
@@ -695,14 +690,15 @@ function TenantAdminScreen({
     setDetailLoading(true)
     setSelectedProfile(null)
     try {
-      const response = await fetch(`https://${server}/api/profiles/${profileId}`, {
+      const response = await fetch(`https://${server}/api/profiles/${profileId}/details`, {
         headers: { 'x-api-key': tenantApiKey, 'Accept': 'application/json' },
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
-      const profile = data.data || data
-      profile._profileId = profileId
-      setSelectedProfile(profile)
+      // Flatten the details response for easier access
+      const details = data.data || {}
+      details._profileId = profileId
+      setSelectedProfile(details)
     } catch (error) {
       toast.error(`Error: ${error instanceof Error ? error.message : 'Unknown'}`)
     } finally {
@@ -755,29 +751,41 @@ function TenantAdminScreen({
 
   // Profile detail view
   if (selectedProfile) {
-    const vh = selectedProfile.verification_history
+    const p = selectedProfile.profile || selectedProfile
+    const vh = selectedProfile.verification || selectedProfile.verification_history
+    const di = vh?.device_info || null
     const fp = vh?.fingerprint ? (typeof vh.fingerprint === 'string' ? (() => { try { return JSON.parse(vh.fingerprint) } catch { return null } })() : vh.fingerprint) : null
 
     const handleStatusChange = async (newStatus: string, notes: string) => {
       try {
-        // Update profile status
-        await fetch(`https://${server}/api/profiles/${selectedProfile._profileId}`, {
-          method: 'PATCH',
-          headers: { 'x-api-key': tenantApiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ verification_status: newStatus }),
-        })
-        // Create status history
-        await fetch(`https://${server}/api/status_history/${selectedProfile._profileId}`, {
-          method: 'POST',
-          headers: { 'x-api-key': tenantApiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            previous_status: selectedProfile.status || 'pending',
-            new_status: newStatus,
-            notes,
-          }),
-        })
+        const pid = selectedProfile._profileId
+        const endpoint = newStatus === 'verified' ? 'approve' : newStatus === 'rejected' ? 'reject' : null
+
+        if (endpoint) {
+          // Use dedicated approve/reject endpoints
+          const response = await fetch(`https://${server}/api/profiles/${pid}/${endpoint}`, {
+            method: 'POST',
+            headers: { 'x-api-key': tenantApiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes }),
+          })
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({}))
+            throw new Error(err.error || `HTTP ${response.status}`)
+          }
+        } else {
+          // Fallback for other statuses (e.g. reopened)
+          await fetch(`https://${server}/api/status_history/${pid}`, {
+            method: 'POST',
+            headers: { 'x-api-key': tenantApiKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              previous_status: selectedProfile.profile?.status || 'pending',
+              new_status: newStatus,
+              notes,
+            }),
+          })
+        }
         toast.success(`Profile ${newStatus}`)
-        handleViewProfile(selectedProfile._profileId)
+        handleViewProfile(pid)
         fetchProfiles(tenantApiKey, statusFilter)
       } catch (error) {
         toast.error(`Failed: ${error instanceof Error ? error.message : 'Unknown'}`)
@@ -789,7 +797,7 @@ function TenantAdminScreen({
         <FieldLegend>
           <span className="flex items-center gap-2">
             Submission #{selectedProfile._profileId?.substring(0, 8)}
-            <span className={getStatusBadge(selectedProfile.status)}>{selectedProfile.status || 'pending'}</span>
+            <span className={getStatusBadge(p.status)}>{p.status || 'pending'}</span>
           </span>
         </FieldLegend>
         <FieldGroup>
@@ -808,14 +816,14 @@ function TenantAdminScreen({
           <div className="rounded-lg border p-4">
             <p className="text-sm font-semibold mb-3">Applicant Details</p>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Full Name:</span> {selectedProfile.name || vh?.name || '—'}</div>
-              <div><span className="text-muted-foreground">Document Type:</span> {selectedProfile.document_type || vh?.document_type || '—'}</div>
-              <div><span className="text-muted-foreground">Document No:</span> {selectedProfile.document_number || vh?.document_number || '—'}</div>
-              <div><span className="text-muted-foreground">Country:</span> {selectedProfile.country || vh?.country || '—'}</div>
+              <div><span className="text-muted-foreground">Full Name:</span> {p.name || vh?.name || '—'}</div>
+              <div><span className="text-muted-foreground">Document Type:</span> {p.document_type || vh?.document_type || '—'}</div>
+              <div><span className="text-muted-foreground">Document No:</span> {p.document_number || vh?.document_number || '—'}</div>
+              <div><span className="text-muted-foreground">Nationality:</span> {p.country || vh?.country || '—'}</div>
               <div><span className="text-muted-foreground">Gender:</span> {vh?.gender || '—'}</div>
               <div><span className="text-muted-foreground">DOB:</span> {vh?.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '—'}</div>
               <div><span className="text-muted-foreground">Address:</span> {vh?.address || '—'}</div>
-              <div><span className="text-muted-foreground">Language:</span> {selectedProfile.language || '—'}</div>
+              <div><span className="text-muted-foreground">Language:</span> {p.language || '—'}</div>
             </div>
           </div>
 
@@ -829,10 +837,10 @@ function TenantAdminScreen({
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Document Front</p>
                     <img
-                      src={getFileUrl(vh.collectionId, vh.id, vh.document_front)}
+                      src={vh.document_front_url}
                       alt="Document Front"
                       className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_front), '_blank')}
+                      onClick={() => window.open(vh.document_front_url, '_blank')}
                     />
                     <p className="text-xs text-muted-foreground mt-1 text-center">Click to enlarge</p>
                   </div>
@@ -841,10 +849,10 @@ function TenantAdminScreen({
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Document Back</p>
                     <img
-                      src={getFileUrl(vh.collectionId, vh.id, vh.document_back)}
+                      src={vh.document_back_url}
                       alt="Document Back"
                       className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.document_back), '_blank')}
+                      onClick={() => window.open(vh.document_back_url, '_blank')}
                     />
                     <p className="text-xs text-muted-foreground mt-1 text-center">Click to enlarge</p>
                   </div>
@@ -854,21 +862,25 @@ function TenantAdminScreen({
           )}
 
           {/* AI Data Verification with Edit */}
-          {vh && <AIVerificationTable profile={selectedProfile} vh={vh} server={server} apiKey={tenantApiKey} onUpdated={() => handleViewProfile(selectedProfile._profileId)} />}
+          {vh && <AIVerificationTable profile={p} vh={vh} server={server} apiKey={tenantApiKey} onUpdated={() => handleViewProfile(selectedProfile._profileId)} />}
 
           {/* Device & Location Intelligence */}
-          {(fp || vh?.ip_address) && (
+          {(di || vh?.ip_address) && (
             <div className="rounded-lg border p-4">
               <p className="text-sm font-semibold mb-1">Device & Location Intelligence</p>
               <p className="text-xs text-muted-foreground mb-3">Technical signals and fingerprinting data</p>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                {fp?.visitorId && <div><span className="text-muted-foreground">Visitor ID:</span> <code className="text-xs">{fp.visitorId}</code></div>}
-                {fp?.confidence?.score && <div><span className="text-muted-foreground">Confidence:</span> {fp.confidence.score}%</div>}
-                {fp?.browserName && <div><span className="text-muted-foreground">Browser:</span> {fp.browserName} {fp.browserVersion}</div>}
-                {fp?.os && <div><span className="text-muted-foreground">OS:</span> {fp.os} {fp.osVersion}</div>}
-                {vh?.ip_address && <div><span className="text-muted-foreground">IP Address:</span> {vh.ip_address}</div>}
-                {fp?.firstSeenAt?.global && <div><span className="text-muted-foreground">First seen:</span> {new Date(fp.firstSeenAt.global).toLocaleDateString()}</div>}
-                {fp?.lastSeenAt?.global && <div><span className="text-muted-foreground">Last seen:</span> {new Date(fp.lastSeenAt.global).toLocaleDateString()}</div>}
+                {di?.visitor_id && <div><span className="text-muted-foreground">Visitor ID:</span> <code className="text-xs">{di.visitor_id}</code></div>}
+                {di?.confidence && <div><span className="text-muted-foreground">Confidence:</span> {(di.confidence * 100).toFixed(1)}%</div>}
+                {di?.browser && <div><span className="text-muted-foreground">Browser:</span> {di.browser} {di.browser_version || ''}</div>}
+                {di?.os && <div><span className="text-muted-foreground">OS:</span> {di.os} {di.os_version || ''}</div>}
+                {(di?.ip || vh?.ip_address) && <div><span className="text-muted-foreground">IP Address:</span> {di?.ip || vh?.ip_address}</div>}
+                {di?.device && <div><span className="text-muted-foreground">Device:</span> {di.device}</div>}
+                {di?.first_seen && <div><span className="text-muted-foreground">First seen:</span> {new Date(di.first_seen).toLocaleDateString()}</div>}
+                {di?.last_seen && <div><span className="text-muted-foreground">Last seen:</span> {new Date(di.last_seen).toLocaleDateString()}</div>}
+                {di?.incognito && <div><span className="text-muted-foreground">Incognito:</span> <span className="text-red-500">Yes</span></div>}
+                {di?.bot && <div><span className="text-muted-foreground">Bot:</span> <span className="text-red-500">Detected</span></div>}
+                {di?.replayed && <div><span className="text-muted-foreground">Replayed:</span> <span className="text-red-500">Yes</span></div>}
               </div>
             </div>
           )}
@@ -886,17 +898,17 @@ function TenantAdminScreen({
                       </span>
                     </div>
                     <div><span className="text-muted-foreground">Liveness Confidence:</span> {vh.liveness_confidence ? `${vh.liveness_confidence}%` : '—'}</div>
-                    <div><span className="text-muted-foreground">Security Level:</span> {selectedProfile.security_level || '—'}</div>
+                    <div><span className="text-muted-foreground">Security Level:</span> {p.security_level || '—'}</div>
                   </div>
                 </div>
                 {vh.facial_photo && (
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Live Selfie</p>
                     <img
-                      src={getFileUrl(vh.collectionId, vh.id, vh.facial_photo)}
+                      src={vh.facial_photo_url}
                       alt="Live Selfie"
                       className="rounded-lg border w-32 h-32 object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => window.open(getFileUrl(vh.collectionId, vh.id, vh.facial_photo), '_blank')}
+                      onClick={() => window.open(vh.facial_photo_url, '_blank')}
                     />
                     <p className="text-xs text-muted-foreground mt-1">Click to enlarge</p>
                   </div>
