@@ -754,8 +754,6 @@ function TenantAdminScreen({
     const p = selectedProfile.profile || selectedProfile
     const vh = selectedProfile.verification || selectedProfile.verification_history
     const di = vh?.device_info || null
-    const fp = vh?.fingerprint ? (typeof vh.fingerprint === 'string' ? (() => { try { return JSON.parse(vh.fingerprint) } catch { return null } })() : vh.fingerprint) : null
-
     const handleStatusChange = async (newStatus: string, notes: string) => {
       try {
         const pid = selectedProfile._profileId
