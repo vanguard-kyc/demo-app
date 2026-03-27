@@ -887,31 +887,71 @@ function TenantAdminScreen({
           {vh && (
             <div className="rounded-lg border p-4">
               <p className="text-sm font-semibold mb-3">Risk Assessment</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="grid gap-3 text-sm">
-                    <div><span className="text-muted-foreground">Liveness Status:</span>{' '}
-                      <span className={vh.liveness_status === 'live' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                        {vh.liveness_status || '—'}
-                      </span>
+              {(() => {
+                const ra = selectedProfile.risk_assessment
+                const score = ra?.score ?? 0
+                const scoreColor = score >= 80 ? 'text-emerald-600' : score >= 50 ? 'text-amber-500' : 'text-red-600'
+                const scoreBg = score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                return (
+                  <div className="space-y-4">
+                    {/* Score bar */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-baseline gap-2 mb-1">
+                          <span className={`text-3xl font-bold ${scoreColor}`}>{score}</span>
+                          <span className="text-sm text-muted-foreground">/ {ra?.max_score ?? 100}</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div className={`h-2 rounded-full ${scoreBg}`} style={{ width: `${score}%` }} />
+                        </div>
+                      </div>
+                      {vh.facial_photo && (
+                        <img
+                          src={vh.facial_photo_url}
+                          alt="Live Selfie"
+                          className="rounded-lg border w-20 h-20 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => window.open(vh.facial_photo_url, '_blank')}
+                        />
+                      )}
                     </div>
-                    <div><span className="text-muted-foreground">Liveness Confidence:</span> {vh.liveness_confidence ? `${vh.liveness_confidence}%` : '—'}</div>
-                    <div><span className="text-muted-foreground">Security Level:</span> {p.security_level || '—'}</div>
+
+                    {/* Details grid */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div><span className="text-muted-foreground">Liveness Status:</span>{' '}
+                        <span className={ra?.liveness_status === 'live' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {ra?.liveness_status || vh.liveness_status || '—'}
+                        </span>
+                      </div>
+                      <div><span className="text-muted-foreground">Liveness Confidence:</span>{' '}
+                        {(ra?.liveness_confidence ?? vh.liveness_confidence) ? `${Number(ra?.liveness_confidence ?? vh.liveness_confidence).toFixed(1)}%` : '—'}
+                      </div>
+                      <div><span className="text-muted-foreground">Face Match:</span>{' '}
+                        <span className={ra?.is_face_match ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {ra?.is_face_match ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div><span className="text-muted-foreground">Document Valid:</span>{' '}
+                        <span className={ra?.document_valid ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {ra?.document_valid ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div><span className="text-muted-foreground">Security Level:</span> {p.security_level || '—'}</div>
+                    </div>
+
+                    {/* Warnings */}
+                    {ra?.warnings && ra.warnings.length > 0 && (
+                      <div className="rounded border border-amber-500/30 bg-amber-500/10 p-3">
+                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">Warnings</p>
+                        <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
+                          {ra.warnings.map((w: string, i: number) => (
+                            <li key={i}>• {w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
-                </div>
-                {vh.facial_photo && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Live Selfie</p>
-                    <img
-                      src={vh.facial_photo_url}
-                      alt="Live Selfie"
-                      className="rounded-lg border w-32 h-32 object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => window.open(vh.facial_photo_url, '_blank')}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">Click to enlarge</p>
-                  </div>
-                )}
-              </div>
+                )
+              })()}
             </div>
           )}
 
