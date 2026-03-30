@@ -427,6 +427,14 @@ function PlayerScreen({
 
       if (!response.ok) {
         const err = await response.json()
+        if (response.status === 409 && (err.url || err.existing_id)) {
+          const redirectUrl = err.url || `https://app.vanguardkyc.online/${err.existing_id}`
+          toast.info('KYC profile already exists. Redirecting to verification...')
+          setTimeout(() => {
+            window.location.href = redirectUrl
+          }, 1500)
+          return
+        }
         throw new Error(err.error || `HTTP ${response.status}`)
       }
 
