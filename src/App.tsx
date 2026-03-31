@@ -151,6 +151,10 @@ function MasterScreen({
       toast.warning('Admin email and password are required')
       return
     }
+    if (adminPassword.length < 8) {
+      toast.warning('Password must be at least 8 characters')
+      return
+    }
     if (!MASTER_API_KEY) {
       toast.error('VITE_MASTER_API_KEY is not set')
       return
@@ -176,7 +180,8 @@ function MasterScreen({
 
       if (!response.ok) {
         const err = await response.json()
-        throw new Error(err.error || `HTTP ${response.status}`)
+        const details = err.details?.map((d: any) => `${d.field}: ${d.message}`).join(', ')
+        throw new Error(details || err.error || `HTTP ${response.status}`)
       }
 
       const data = await response.json()
