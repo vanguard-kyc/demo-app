@@ -1287,11 +1287,11 @@ function AIVerificationTable({ profile, vh, server, apiKey, onUpdated }: {
   }
 
   const rows = [
-    { field: 'Full Name', key: 'name', submitted: profile.name, extracted: vh.name },
-    { field: 'Doc Number', key: 'document_number', submitted: profile.document_number, extracted: vh.document_number },
-    { field: 'DOB', key: '', submitted: '', extracted: vh.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '' },
-    { field: 'Nationality', key: 'country', submitted: profile.country, extracted: vh.country },
-    { field: 'Address', key: '', submitted: '', extracted: vh.address },
+    { field: 'Full Name', key: 'name', submitted: profile.api_submitted_name || '', extracted: vh.name },
+    { field: 'Doc Number', key: 'document_number', submitted: profile.api_submitted_document_number || '', extracted: vh.document_number },
+    { field: 'DOB', key: '', submitted: profile.api_submitted_date_of_birth ? new Date(profile.api_submitted_date_of_birth).toLocaleDateString() : '', extracted: vh.date_of_birth ? new Date(vh.date_of_birth).toLocaleDateString() : '' },
+    { field: 'Nationality', key: 'country', submitted: profile.api_submitted_country || '', extracted: vh.country },
+    { field: 'Address', key: '', submitted: profile.api_submitted_address || '', extracted: vh.address },
   ]
 
   return (
