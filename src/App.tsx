@@ -374,6 +374,10 @@ function PlayerScreen({
   const [userEmail, setUserEmail] = useState('')
   const [documentType, setDocumentType] = useState('')
   const [documentNumber, setDocumentNumber] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [address, setAddress] = useState('')
+  const [gender, setGender] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [balance] = useState('10,000.00')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -420,6 +424,10 @@ function PlayerScreen({
       if (documentType) payload.documentType = documentType
       if (documentNumber) payload.documentNumber = documentNumber
       if (country) payload.country = country
+      if (phoneNumber) payload.phoneNumber = phoneNumber
+      if (address) payload.address = address
+      if (gender) payload.gender = gender
+      if (dateOfBirth) payload.dateOfBirth = dateOfBirth
 
       const response = await fetch(`https://${server}/api/profiles/create`, {
         method: 'POST',
@@ -622,6 +630,47 @@ function PlayerScreen({
             </Select>
           </Field>
         </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field>
+            <FieldLabel htmlFor="phone">Phone Number</FieldLabel>
+            <Input
+              id="phone"
+              placeholder="+60123456789"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="gender">Gender</FieldLabel>
+            <Select value={gender} onValueChange={setGender}>
+              <SelectTrigger id="gender">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">Male</SelectItem>
+                <SelectItem value="female">Female</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <Field>
+          <FieldLabel htmlFor="dob">Date of Birth</FieldLabel>
+          <Input
+            id="dob"
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="address">Address</FieldLabel>
+          <Input
+            id="address"
+            placeholder="123 Main St, City"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
+        </Field>
 
         <Button
           onClick={handleWithdraw}
