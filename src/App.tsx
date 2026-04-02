@@ -458,7 +458,8 @@ function PlayerScreen({
           }, 1500)
           return
         }
-        throw new Error(err.error || `HTTP ${response.status}`)
+        const details = err.details?.map((d: any) => `${d.field}: ${d.message}`).join(', ')
+        throw new Error(details || err.error || `HTTP ${response.status}`)
       }
 
       const data = await response.json()
