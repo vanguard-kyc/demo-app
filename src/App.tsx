@@ -378,6 +378,15 @@ function PlayerScreen({
   const [address, setAddress] = useState('')
   const [gender, setGender] = useState('')
   const [dateOfBirth, setDateOfBirth] = useState('')
+  const [userIp, setUserIp] = useState('')
+
+  // Auto-detect user IP on mount
+  useEffect(() => {
+    fetch('https://api.ipify.org?format=json')
+      .then(r => r.json())
+      .then(d => setUserIp(d.ip || ''))
+      .catch(() => {})
+  }, [])
   const [balance] = useState('10,000.00')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -428,6 +437,7 @@ function PlayerScreen({
       if (address) payload.address = address
       if (gender) payload.gender = gender
       if (dateOfBirth) payload.dateOfBirth = dateOfBirth
+      if (userIp) payload.ipAddress = userIp
 
       const response = await fetch(`https://${server}/api/profiles/create`, {
         method: 'POST',
@@ -669,6 +679,15 @@ function PlayerScreen({
             placeholder="123 Main St, City"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="ipAddress">IP Address</FieldLabel>
+          <Input
+            id="ipAddress"
+            placeholder="Auto-detecting..."
+            value={userIp}
+            onChange={(e) => setUserIp(e.target.value)}
           />
         </Field>
 
