@@ -21,7 +21,8 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 
-const MASTER_API_KEY = import.meta.env.VITE_MASTER_API_KEY || ''
+// Security: Master API key is never hardcoded or embedded in the bundle.
+// User must enter it manually in the Master screen.
 
 type Screen = 'home' | 'master' | 'player' | 'tenant-admin'
 
@@ -132,6 +133,7 @@ function MasterScreen({
   setServer: (s: string) => void
   onBack?: () => void
 }) {
+  const [masterApiKey, setMasterApiKey] = useState('')
   const [tenantName, setTenantName] = useState('')
   const [referenceId, setReferenceId] = useState('')
   const [description, setDescription] = useState('')
@@ -143,6 +145,10 @@ function MasterScreen({
   const [copied, setCopied] = useState(false)
 
   const handleCreateTenant = async () => {
+    if (!masterApiKey) {
+      toast.error('Master API Key is required')
+      return
+    }
     if (!tenantName) {
       toast.warning('Tenant name is required')
       return
@@ -155,10 +161,6 @@ function MasterScreen({
       toast.warning('Password must be at least 8 characters')
       return
     }
-    if (!MASTER_API_KEY) {
-      toast.error('VITE_MASTER_API_KEY is not set')
-      return
-    }
 
     setIsLoading(true)
     try {
@@ -166,7 +168,7 @@ function MasterScreen({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': MASTER_API_KEY,
+          'x-api-key': masterApiKey,
         },
         body: JSON.stringify({
           name: tenantName,
@@ -219,6 +221,17 @@ function MasterScreen({
             id="server"
             value={server}
             onChange={(e) => setServer(e.target.value)}
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="masterKey">Master API Key *</FieldLabel>
+          <Input
+            id="masterKey"
+            type="password"
+            placeholder="Enter your master API key"
+            value={masterApiKey}
+            onChange={(e) => setMasterApiKey(e.target.value)}
           />
         </Field>
 
@@ -324,7 +337,7 @@ function MasterScreen({
 
             <Separator />
 
-            <DomainWhitelistStep server={server} />
+            <DomainWhitelistStep server={server} masterApiKey={masterApiKey} />
 
             <Separator />
 
@@ -1211,7 +1224,7 @@ function TenantAdminScreen({
   )
 }
 
-function DomainWhitelistStep({ server }: { server: string }) {
+function DomainWhitelistStep({ server, masterApiKey }: { server: string; masterApiKey: string }) {
   const [domain, setDomain] = useState('')
   const [notes, setNotes] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -1223,8 +1236,8 @@ function DomainWhitelistStep({ server }: { server: string }) {
       toast.warning('Enter a domain')
       return
     }
-    if (!MASTER_API_KEY) {
-      toast.error('Master API key not configured')
+    if (!masterApiKey) {
+      toast.error('Master API key not provided')
       return
     }
 
@@ -1234,7 +1247,7 @@ function DomainWhitelistStep({ server }: { server: string }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': MASTER_API_KEY,
+          'x-api-key': masterApiKey,
         },
         body: JSON.stringify({ domain: d, notes: notes.trim() || undefined }),
       })
