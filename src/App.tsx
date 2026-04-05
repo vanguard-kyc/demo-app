@@ -831,11 +831,49 @@ function TenantAdminScreen({
     )
   }
 
-  // Helper to append API key to file URLs for authenticated image loading
+  // Signed file URLs cache — maps file path to { url, expiry }
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
+
+  // Get a signed URL for a file (calls backend /api/files/sign endpoint)
+  const getSignedUrl = async (fileUrl: string | null | undefined): Promise<string> => {
+    if (!fileUrl || !tenantApiKey) return ''
+    // Extract path from URL: https://api.../api/files/col/rec/file → col/rec/file
+    const match = fileUrl.match(/\/api\/files\/(.+)$/)
+    if (!match) return fileUrl
+    const path = match[1]
+
+    // Return cached if available
+    if (signedUrls[path]) return signedUrls[path]
+
+    try {
+      const res = await fetch(`https://${server}/api/files/sign?path=${encodeURIComponent(path)}`, {
+        headers: { 'x-api-key': tenantApiKey }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSignedUrls(prev => ({ ...prev, [path]: data.url }))
+        return data.url
+      }
+    } catch {}
+    return fileUrl
+  }
+
+  // Sign all file URLs when profile is loaded
+  useEffect(() => {
+    if (!selectedProfile) return
+    const vh = selectedProfile.verification || selectedProfile.verification_history
+    if (!vh) return
+
+    const urls = [vh.document_front_url, vh.document_back_url, vh.facial_photo_url].filter(Boolean)
+    urls.forEach(url => getSignedUrl(url))
+  }, [selectedProfile])
+
+  // Helper to get signed URL (sync, from cache)
   const authUrl = (url: string | null | undefined) => {
-    if (!url || !tenantApiKey) return url || ''
-    const sep = url.includes('?') ? '&' : '?'
-    return `${url}${sep}key=${encodeURIComponent(tenantApiKey)}`
+    if (!url) return ''
+    const match = url.match(/\/api\/files\/(.+)$/)
+    if (!match) return url
+    return signedUrls[match[1]] || url
   }
 
   // Profile detail view
