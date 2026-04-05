@@ -831,6 +831,13 @@ function TenantAdminScreen({
     )
   }
 
+  // Helper to append API key to file URLs for authenticated image loading
+  const authUrl = (url: string | null | undefined) => {
+    if (!url || !tenantApiKey) return url || ''
+    const sep = url.includes('?') ? '&' : '?'
+    return `${url}${sep}key=${encodeURIComponent(tenantApiKey)}`
+  }
+
   // Profile detail view
   if (selectedProfile) {
     const p = selectedProfile.profile || selectedProfile
@@ -917,10 +924,10 @@ function TenantAdminScreen({
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Document Front</p>
                     <img
-                      src={vh.document_front_url}
+                      src={authUrl(vh.document_front_url)}
                       alt="Document Front"
                       className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => window.open(vh.document_front_url, '_blank')}
+                      onClick={() => window.open(authUrl(vh.document_front_url), '_blank')}
                     />
                     <p className="text-xs text-muted-foreground mt-1 text-center">Click to enlarge</p>
                   </div>
@@ -929,10 +936,10 @@ function TenantAdminScreen({
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Document Back</p>
                     <img
-                      src={vh.document_back_url}
+                      src={authUrl(vh.document_back_url)}
                       alt="Document Back"
                       className="rounded-lg border w-full aspect-[3/2] object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                      onClick={() => window.open(vh.document_back_url, '_blank')}
+                      onClick={() => window.open(authUrl(vh.document_back_url), '_blank')}
                     />
                     <p className="text-xs text-muted-foreground mt-1 text-center">Click to enlarge</p>
                   </div>
@@ -989,10 +996,10 @@ function TenantAdminScreen({
                       </div>
                       {vh.facial_photo && (
                         <img
-                          src={vh.facial_photo_url}
+                          src={authUrl(vh.facial_photo_url)}
                           alt="Live Selfie"
                           className="rounded-lg border w-20 h-20 object-cover cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => window.open(vh.facial_photo_url, '_blank')}
+                          onClick={() => window.open(authUrl(vh.facial_photo_url), '_blank')}
                         />
                       )}
                     </div>
