@@ -24,6 +24,24 @@ import { Separator } from "@/components/ui/separator"
 // Security: Master API key is never hardcoded or embedded in the bundle.
 // User must enter it manually in the Master screen.
 
+// D1/D2 fix: Validate redirect URLs to prevent open redirects
+const isSafeUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    const safeDomains = ['vanguardkyc.online', 'identivia.com'];
+    return parsed.protocol === 'https:' && safeDomains.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d));
+  } catch { return false; }
+};
+
+// D3 fix: Validate server URL scheme
+const isValidServerUrl = (server: string): boolean => {
+  return server.startsWith('localhost') || server.startsWith('https://') || /^[a-zA-Z0-9.-]+$/.test(server);
+};
+
+const isCustomServer = (server: string): boolean => {
+  return server !== 'api.vanguardkyc.online' && !server.startsWith('localhost');
+};
+
 type Screen = 'home' | 'master' | 'player' | 'tenant-admin'
 
 interface Tenant {
@@ -220,9 +238,17 @@ function MasterScreen({
           <Input
             id="server"
             value={server}
-            onChange={(e) => setServer(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === '' || isValidServerUrl(val)) setServer(val);
+            }}
           />
         </Field>
+        {isCustomServer(server) && (
+          <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400 font-medium">
+            Warning: Custom server — API keys will be sent to this server.
+          </div>
+        )}
 
         <Field>
           <FieldLabel htmlFor="masterKey">Master API Key *</FieldLabel>
@@ -465,6 +491,10 @@ function PlayerScreen({
         const err = await response.json()
         if (response.status === 409 && (err.url || err.existing_id)) {
           const redirectUrl = err.url || `https://app.vanguardkyc.online/${err.existing_id}`
+          if (!isSafeUrl(redirectUrl)) {
+            toast.error('Redirect blocked: URL is not a trusted VanguardKYC domain.')
+            return
+          }
           toast.info('KYC profile already exists. Redirecting to verification...')
           setTimeout(() => {
             window.location.href = redirectUrl
@@ -478,6 +508,10 @@ function PlayerScreen({
       const data = await response.json()
 
       if (data.id && data.url) {
+        if (!isSafeUrl(data.url)) {
+          toast.error('Redirect blocked: URL is not a trusted VanguardKYC domain.')
+          return
+        }
         toast.success('KYC profile created! Redirecting to verification...')
         setTimeout(() => {
           window.location.href = data.url
@@ -505,9 +539,17 @@ function PlayerScreen({
             <Input
               id="server"
               value={server}
-              onChange={(e) => setServer(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '' || isValidServerUrl(val)) setServer(val);
+              }}
             />
           </Field>
+          {isCustomServer(server) && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400 font-medium">
+              Warning: Custom server — API keys will be sent to this server.
+            </div>
+          )}
           <Separator />
           <Field>
             <FieldLabel htmlFor="tenantKey">Tenant API Key *</FieldLabel>
@@ -703,6 +745,7 @@ function PlayerScreen({
             value={userIp}
             onChange={(e) => setUserIp(e.target.value)}
           />
+          <p className="text-xs text-muted-foreground">(detected via ipify.org)</p>
         </Field>
 
         <Button
@@ -860,8 +903,16 @@ function TenantAdminScreen({
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="server">API Server</FieldLabel>
-            <Input id="server" value={server} onChange={(e) => setServer(e.target.value)} />
+            <Input id="server" value={server} onChange={(e) => {
+              const val = e.target.value;
+              if (val === '' || isValidServerUrl(val)) setServer(val);
+            }} />
           </Field>
+          {isCustomServer(server) && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400 font-medium">
+              Warning: Custom server — API keys will be sent to this server.
+            </div>
+          )}
           <Separator />
           <Field>
             <FieldLabel htmlFor="adminKey">Tenant API Key *</FieldLabel>
@@ -1139,7 +1190,7 @@ function TenantAdminScreen({
           <div>
             <p className="text-sm font-semibold">Connected</p>
             <p className="text-xs text-muted-foreground break-all">
-              Key: {tenantApiKey.substring(0, 8)}...{tenantApiKey.substring(tenantApiKey.length - 4)}
+              Key: {tenantApiKey.substring(0, 4)}...{tenantApiKey.substring(tenantApiKey.length - 2)}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => window.open('https://admin.vanguardkyc.online', '_blank')}>
