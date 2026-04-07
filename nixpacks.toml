@@ -1,2 +1,0 @@
-[start]
-cmd = "caddy run --config /assets/Caddyfile --adapter caddyfile"
