@@ -432,6 +432,7 @@ function PlayerScreen({
   const [securityLevel, setSecurityLevel] = useState('mid')
   const [country, setCountry] = useState('')
   const [language, setLanguage] = useState('')
+  const [redirectUrl, setRedirectUrl] = useState('')
 
   const handleLogin = () => {
     if (!tenantApiKey) {
@@ -477,6 +478,7 @@ function PlayerScreen({
       if (gender) payload.gender = gender
       if (dateOfBirth) payload.dateOfBirth = dateOfBirth
       if (userIp) payload.ipAddress = userIp
+      if (redirectUrl) payload.redirectUrl = redirectUrl
 
       const response = await fetch(`https://${server}/api/profiles/create`, {
         method: 'POST',
@@ -746,6 +748,16 @@ function PlayerScreen({
             onChange={(e) => setUserIp(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">(detected via ipify.org)</p>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="redirectUrl">Redirect URL after KYC (optional)</FieldLabel>
+          <Input
+            id="redirectUrl"
+            placeholder="https://example.com/kyc-done?session=abc"
+            value={redirectUrl}
+            onChange={(e) => setRedirectUrl(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Where the user is sent after approval. Overrides the tenant default. Bare hostnames auto-prefix to https://.</p>
         </Field>
 
         <Button
