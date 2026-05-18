@@ -63,10 +63,20 @@ function getDefaultScreen(): Screen {
   return 'home'
 }
 
+// Pick the API server that matches the current demo hostname so dev/stg
+// demo deployments don't accidentally call production. Falls back to prod.
+function getDefaultServer(): string {
+  if (typeof window === 'undefined') return 'api.vanguardkyc.online'
+  const h = window.location.hostname.toLowerCase()
+  if (h.endsWith('.dev.vanguardkyc.online')) return 'api.dev.vanguardkyc.online'
+  if (h.endsWith('.stg.vanguardkyc.online')) return 'api.stg.vanguardkyc.online'
+  return 'api.vanguardkyc.online'
+}
+
 function App() {
   const defaultScreen = getDefaultScreen()
   const [screen, setScreen] = useState<Screen>(defaultScreen)
-  const [server, setServer] = useState('api.vanguardkyc.online')
+  const [server, setServer] = useState(getDefaultServer())
 
   // If accessed via a specific domain, lock to that screen (hide back/home)
   const isLocked = defaultScreen !== 'home'
